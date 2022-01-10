@@ -1,3 +1,4 @@
+import sys
 import os
 import pygame
 
@@ -18,6 +19,41 @@ LEVELS_DIR = os.path.join(CURRENT_DIR, 'levels')
 
 LEVEL_ELEM_FLOOR = "."
 LEVEL_ELEM_WALL = "#"
+
+
+def load_image(name, colorkey=None):
+    """
+    Загрузка изображения спрайта
+    :param name: имя файла
+    :param colorkey: фоновый цвет
+    :return: спрайт
+    """
+    fullname = os.path.join(name)
+    if not os.path.isfile(fullname):
+        print(f"Файл с изображением '{fullname}' не найден")
+        sys.exit()
+    image = pygame.image.load(fullname)
+    if colorkey is not None:
+        image = image.convert()
+        if colorkey == -1:
+            colorkey = image.get_at((0, 0))
+        image.set_colorkey(colorkey)
+    else:
+        image = image.convert_alpha()
+    width, height = image.get_rect().size
+    return pygame.transform.scale(image, (width, height))
+
+
+class SpriteSheet:
+    """Набор спрайтов"""
+    def __init__(self, file_name):
+        self.sprite_sheet = pygame.image.load(file_name).convert()
+
+    def get_image(self, x, y, width, height):
+        image = pygame.Surface((width, height)).convert()
+        image.blit(self.sprite_sheet, (0, 0), pygame.Rect(x, y, width, height))
+        image.set_colorkey(BLACK)
+        return pygame.transform.scale(image, (width, height))
 
 
 class Level:
