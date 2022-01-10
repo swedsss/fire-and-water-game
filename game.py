@@ -61,8 +61,7 @@ class SpriteSheet:
 
 
 class EdgeSpriteSheet(SpriteSheet):
-    """Класс для набора спрайтов, которые расположены с учётом соседних спрайтов
-    Подробности по ссылке: http://www.cr31.co.uk/stagecast/wang/intro.html """
+    """Класс для набора спрайтов, которые расположены с учётом соседних спрайтов"""
     TILE_COORDS_DICT = {
         4: (0, 0), 6: (1, 0), 14: (2, 0), 12: (3, 0),
         5: (0, 1), 7: (1, 1), 15: (2, 1), 13: (3, 1),
@@ -78,6 +77,7 @@ class EdgeSpriteSheet(SpriteSheet):
 
 
 class Wall(pygame.sprite.Sprite):
+    """Класс для спрайта стены"""
     class_init_done = False
     SPRITES = []
 
@@ -101,6 +101,7 @@ class Wall(pygame.sprite.Sprite):
 
 
 class Floor(pygame.sprite.Sprite):
+    """Класс для спрайта пола"""
     class_init_done = False
     SPRITES = None
 
@@ -127,7 +128,7 @@ class Level:
     def __init__(self, filename):
         self.filename = filename
         self.width, self.height = 0, 0
-        self.data = []
+        self.elems = []
         self.load_level(filename)
 
     def load_level(self, filename):
@@ -140,7 +141,34 @@ class Level:
         self.width = max(map(len, data))
         self.height = len(data)
         data = list(map(lambda x: x.ljust(self.width, '.'), data))
-        self.data = data
+
+        self.elems = [[-1] * self.width for _ in range(self.height)]
+        for row, line in enumerate(data):
+            for col, elem in enumerate(line):
+                if elem == LEVEL_ELEM_WALL:
+                    self.elems[row][col] = 0
+
+        self.connect_near_walls()
+
+    def connect_near_walls(self):
+        """Расчёт индекса отображаемого спрайта стены с учётом соседних стен"""
+        for row in range(self.height):
+            for col in range(self.width):
+                if self.elems[row][col] < 0:
+                    continue
+                wall_index = 0
+                near_list = [(col, row - 1, 1), (col + 1, row, 2),
+                             (col, row + 1, 4), (col - 1, row, 8)]
+                for near_col, near_row, weight in near_list:
+                    if not self.cell_on_board(near_col, near_row):
+                        continue
+                    if self.elems[near_row][near_col] >= 0:
+                        wall_index += weight
+                self.elems[row][col] = wall_index
+
+    def cell_on_board(self, col, row):
+        """Проверка на присутствие координат на игровом уровне"""
+        return 0 <= col < self.width and 0 <= row < self.height
 
 
 class Game:
@@ -155,6 +183,7 @@ class Game:
         self.game_over = False
 
         self.all_sprites = pygame.sprite.Group()
+        self.wall_sprites = pygame.sprite.Group()
 
         self.level = None
 
@@ -163,6 +192,14 @@ class Game:
         self.all_sprites.empty()
 
         self.level = Level('level1.txt')
+        for row in range(self.level.height):
+            for col in range(self.level.width):
+                if self.level.elems[row][col] < 0:
+                    level_sprite = Floor(col, row)
+                else:
+                    level_sprite = Wall(col, row, self.level.elems[row][col])
+                    self.wall_sprites.add(level_sprite)
+                self.all_sprites.add(level_sprite)
 
     def process_events(self):
         """Обработка событий игры"""
@@ -178,13 +215,6 @@ class Game:
     def display(self):
         """Отрисовка элементов игры"""
         self.screen.fill(BLACK)
-
-        # Отображение прямоугольников на месте стен
-        for row in range(self.level.height):
-            for col in range(self.level.width):
-                if self.level.data[row][col] == LEVEL_ELEM_WALL:
-                    pygame.draw.rect(self.screen, WHITE, (col * SPRITE_SIZE, row * SPRITE_SIZE,
-                                                          SPRITE_SIZE, SPRITE_SIZE))
 
         self.all_sprites.draw(self.screen)
 
