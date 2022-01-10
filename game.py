@@ -16,6 +16,10 @@ WHITE = pygame.Color('white')
 
 CURRENT_DIR = os.path.dirname(__file__)
 LEVELS_DIR = os.path.join(CURRENT_DIR, 'levels')
+IMG_DIR = os.path.join(CURRENT_DIR, 'img')
+
+SPRITE_FILE_WALLS = 'walls.png'
+SPRITE_FILE_FLOOR = "floor.png"
 
 LEVEL_ELEM_FLOOR = "."
 LEVEL_ELEM_WALL = "#"
@@ -54,6 +58,68 @@ class SpriteSheet:
         image.blit(self.sprite_sheet, (0, 0), pygame.Rect(x, y, width, height))
         image.set_colorkey(BLACK)
         return pygame.transform.scale(image, (width, height))
+
+
+class EdgeSpriteSheet(SpriteSheet):
+    """Класс для набора спрайтов, которые расположены с учётом соседних спрайтов
+    Подробности по ссылке: http://www.cr31.co.uk/stagecast/wang/intro.html """
+    TILE_COORDS_DICT = {
+        4: (0, 0), 6: (1, 0), 14: (2, 0), 12: (3, 0),
+        5: (0, 1), 7: (1, 1), 15: (2, 1), 13: (3, 1),
+        1: (0, 2), 3: (1, 2), 11: (2, 2), 9: (3, 2),
+        0: (0, 3), 2: (1, 3), 10: (2, 3), 8: (3, 3)
+    }
+
+    def get_image_by_index(self, index):
+        if index < 0 or index >= 16:
+            raise ValueError("Индекс должен быть в пределах от 0 до 15 включительно!")
+        col, row = self.TILE_COORDS_DICT[index]
+        return self.get_image(SPRITE_SIZE * col, SPRITE_SIZE * row, SPRITE_SIZE, SPRITE_SIZE)
+
+
+class Wall(pygame.sprite.Sprite):
+    class_init_done = False
+    SPRITES = []
+
+    @classmethod
+    def class_init(cls):
+        edge_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_WALLS))
+        cls.SPRITES = [edge_sheet.get_image_by_index(i) for i in range(16)]
+        cls.class_init_done = True
+
+    def __init__(self, col, row, index):
+        super().__init__()
+        if self.class_init_done is False:
+            self.class_init()
+        self.image = self.SPRITES[index].convert()
+        self.rect = self.image.get_rect()
+        self.set_pos(col, row)
+
+    def set_pos(self, col, row):
+        self.rect.x = col * SPRITE_SIZE
+        self.rect.y = row * SPRITE_SIZE
+
+
+class Floor(pygame.sprite.Sprite):
+    class_init_done = False
+    SPRITES = None
+
+    @classmethod
+    def class_init(cls):
+        cls.SPRITES = [load_image(os.path.join(IMG_DIR, SPRITE_FILE_FLOOR))]
+        cls.class_init_done = True
+
+    def __init__(self, col, row):
+        super().__init__()
+        if self.class_init_done is False:
+            self.class_init()
+        self.image = self.SPRITES[0].convert()
+        self.rect = self.image.get_rect()
+        self.set_pos(col, row)
+
+    def set_pos(self, col, row):
+        self.rect.x = col * SPRITE_SIZE
+        self.rect.y = row * SPRITE_SIZE
 
 
 class Level:
