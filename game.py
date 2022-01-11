@@ -2,6 +2,7 @@ import sys
 import os
 import pygame
 
+
 SPRITE_SIZE = 32
 MAX_LEVEL_SIZE = 25
 
@@ -18,8 +19,10 @@ CURRENT_DIR = os.path.dirname(__file__)
 LEVELS_DIR = os.path.join(CURRENT_DIR, 'levels')
 IMG_DIR = os.path.join(CURRENT_DIR, 'img')
 
-SPRITE_FILE_WALLS = 'walls.png'
+SPRITE_FILE_WALLS = "walls.png"
 SPRITE_FILE_FLOOR = "floor.png"
+SPRITE_FILE_FIRE_PLAYER = "fire_player.png"
+SPRITE_FILE_WATER_PLAYER = "water_player.png"
 
 LEVEL_ELEM_FLOOR = "."
 LEVEL_ELEM_WALL = "#"
@@ -76,7 +79,22 @@ class EdgeSpriteSheet(SpriteSheet):
         return self.get_image(SPRITE_SIZE * col, SPRITE_SIZE * row, SPRITE_SIZE, SPRITE_SIZE)
 
 
-class Wall(pygame.sprite.Sprite):
+class Sprite(pygame.sprite.Sprite):
+    """Общий класс для всех спрайтов на экране"""
+    def __init__(self):
+        super().__init__()
+        self.image = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE)).convert()
+        self.rect = self.image.get_rect()
+
+    def set_pos(self, x, y):
+        self.rect.x = x
+        self.rect.y = y
+
+    def set_cell_pos(self, col, row):
+        self.set_pos(col * SPRITE_SIZE, row * SPRITE_SIZE)
+
+
+class Wall(Sprite):
     """Класс для спрайта стены"""
     class_init_done = False
     SPRITES = []
@@ -100,7 +118,7 @@ class Wall(pygame.sprite.Sprite):
         self.rect.y = row * SPRITE_SIZE
 
 
-class Floor(pygame.sprite.Sprite):
+class Floor(Sprite):
     """Класс для спрайта пола"""
     class_init_done = False
     SPRITES = None
@@ -121,6 +139,54 @@ class Floor(pygame.sprite.Sprite):
     def set_pos(self, col, row):
         self.rect.x = col * SPRITE_SIZE
         self.rect.y = row * SPRITE_SIZE
+
+
+class Player(Sprite):
+    """Общий класс для игроков"""
+    def __init__(self, col, row):
+        super().__init__()
+        self.sprite_sheet = None
+        self.define_sprite_sheet()
+
+        self.left_sprites = []
+        self.right_sprites = []
+        self.up_sprites = []
+        self.down_sprites = []
+        self.load_sprites()
+
+        self.image = self.down_sprites[-1]
+        self.rect = self.image.get_rect()
+        self.set_cell_pos(col, row)
+
+    def define_sprite_sheet(self):
+        pass
+
+    def load_sprites(self):
+        """Загрузка спрайтов для анимаций перемещения"""
+        for row, sprite_list in enumerate([self.down_sprites, self.left_sprites,
+                                           self.right_sprites, self.up_sprites]):
+            for col in range(4):
+                image = self.sprite_sheet.get_image(col * SPRITE_SIZE, row * SPRITE_SIZE,
+                                                    SPRITE_SIZE, SPRITE_SIZE)
+                sprite_list.append(image)
+
+
+class FirePlayer(Player):
+    """Класс для игрока 'Огонь'"""
+    def __init__(self, col, row):
+        super().__init__(col, row)
+
+    def define_sprite_sheet(self):
+        self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_FIRE_PLAYER))
+
+
+class WaterPlayer(Player):
+    """Класс для игрока 'Вода'"""
+    def __init__(self, col, row):
+        super().__init__(col, row)
+
+    def define_sprite_sheet(self):
+        self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_WATER_PLAYER))
 
 
 class Level:
