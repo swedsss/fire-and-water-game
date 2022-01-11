@@ -91,12 +91,15 @@ class Sprite(pygame.sprite.Sprite):
         self.image = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE)).convert()
         self.rect = self.image.get_rect()
 
+    def get_pos(self):
+        return self.rect.centerx, self.rect.centery
+
     def set_pos(self, x, y):
-        self.rect.x = x
-        self.rect.y = y
+        self.rect.centerx = x
+        self.rect.centery = y
 
     def set_cell_pos(self, col, row):
-        self.set_pos(col * SPRITE_SIZE, row * SPRITE_SIZE)
+        self.set_pos(col * SPRITE_SIZE + SPRITE_SIZE // 2, row * SPRITE_SIZE + SPRITE_SIZE // 2)
 
 
 class Wall(Sprite):
@@ -176,9 +179,9 @@ class Player(Sprite):
         """Перемещение в соседнню клетку"""
         if self.walk_to_pos is not None:
             return
-        pos_before_move = self.rect.x, self.rect.y
+        pos_before_move = self.get_pos()
         self.rect = self.rect.move(col * SPRITE_SIZE, row * SPRITE_SIZE)
-        pos_after_move = self.rect.x, self.rect.y
+        pos_after_move = self.get_pos()
         can_walk = not pygame.sprite.spritecollideany(self, stop_group)
 
         if pos_after_move != pos_before_move:
@@ -210,7 +213,7 @@ class Player(Sprite):
 
         self.animate()
 
-        if self.walk_to_pos == (self.rect.x, self.rect.y):
+        if self.walk_to_pos == self.get_pos():
             self.reset_animation()
 
     def animate(self):
@@ -227,19 +230,19 @@ class Player(Sprite):
             self.last_anim_tick = now
             step = min([max([abs(self.walk_to_pos[0] - self.rect.x),
                              abs(self.walk_to_pos[1] - self.rect.y)]), PLAYER_STEP])
-            self.change_sprites([self.rect.x, self.rect.y], self.walk_to_pos)
-            if self.walk_to_pos[0] < self.rect.x:
-                self.rect.x -= step
-            elif self.walk_to_pos[0] > self.rect.x:
-                self.rect.x += step
-            if self.walk_to_pos[1] < self.rect.y:
-                self.rect.y -= step
-            elif self.walk_to_pos[1] > self.rect.y:
-                self.rect.y += step
-            x, y = self.rect.x, self.rect.y
+            self.change_sprites(self.get_pos(), self.walk_to_pos)
+            if self.walk_to_pos[0] < self.rect.centerx:
+                self.rect.centerx -= step
+            elif self.walk_to_pos[0] > self.rect.centerx:
+                self.rect.centerx += step
+            if self.walk_to_pos[1] < self.rect.centery:
+                self.rect.centery -= step
+            elif self.walk_to_pos[1] > self.rect.centery:
+                self.rect.centery += step
+            pos_x, pos_y = self.get_pos()
             self.image = self.sprites[self.current_sprite_index]
             self.rect = self.image.get_rect()
-            self.set_pos(x, y)
+            self.set_pos(pos_x, pos_y)
 
     def reset_animation(self):
         self.walk_to_pos = None
