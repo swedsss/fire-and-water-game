@@ -26,6 +26,8 @@ SPRITE_FILE_WATER_PLAYER = "water_player.png"
 
 LEVEL_ELEM_FLOOR = "."
 LEVEL_ELEM_WALL = "#"
+LEVEL_ELEM_FIRE_PLAYER = "1"
+LEVEL_ELEM_WATER_PLAYER = "2"
 
 
 def load_image(name, colorkey=None):
@@ -195,6 +197,8 @@ class Level:
         self.filename = filename
         self.width, self.height = 0, 0
         self.elems = []
+        self.fire_player_pos = None
+        self.water_player_pos = None
         self.load_level(filename)
 
     def load_level(self, filename):
@@ -213,6 +217,10 @@ class Level:
             for col, elem in enumerate(line):
                 if elem == LEVEL_ELEM_WALL:
                     self.elems[row][col] = 0
+                elif elem == LEVEL_ELEM_FIRE_PLAYER:
+                    self.fire_player_pos = col, row
+                elif elem == LEVEL_ELEM_WATER_PLAYER:
+                    self.water_player_pos = col, row
 
         self.connect_near_walls()
 
@@ -248,6 +256,9 @@ class Game:
         self.running = True
         self.game_over = False
 
+        self.fire_player = None
+        self.water_player = None
+
         self.all_sprites = pygame.sprite.Group()
         self.wall_sprites = pygame.sprite.Group()
 
@@ -260,12 +271,20 @@ class Game:
         self.level = Level('level1.txt')
         for row in range(self.level.height):
             for col in range(self.level.width):
-                if self.level.elems[row][col] < 0:
-                    level_sprite = Floor(col, row)
-                else:
+                if self.level.elems[row][col] >= 0:
                     level_sprite = Wall(col, row, self.level.elems[row][col])
                     self.wall_sprites.add(level_sprite)
+                else:
+                    level_sprite = Floor(col, row)
+
                 self.all_sprites.add(level_sprite)
+
+        if self.level.fire_player_pos is not None:
+            self.fire_player = FirePlayer(*self.level.fire_player_pos)
+            self.all_sprites.add(self.fire_player)
+        if self.level.water_player_pos is not None:
+            self.water_player = WaterPlayer(*self.level.water_player_pos)
+            self.all_sprites.add(self.water_player)
 
     def process_events(self):
         """Обработка событий игры"""
