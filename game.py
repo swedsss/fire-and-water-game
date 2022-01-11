@@ -29,6 +29,9 @@ LEVEL_ELEM_WALL = "#"
 LEVEL_ELEM_FIRE_PLAYER = "1"
 LEVEL_ELEM_WATER_PLAYER = "2"
 
+PLAYER_STEP = SPRITE_SIZE // 8
+PlAYER_ANIMATION_DURATION = 100
+
 
 def load_image(name, colorkey=None):
     """
@@ -113,11 +116,7 @@ class Wall(Sprite):
             self.class_init()
         self.image = self.SPRITES[index].convert()
         self.rect = self.image.get_rect()
-        self.set_pos(col, row)
-
-    def set_pos(self, col, row):
-        self.rect.x = col * SPRITE_SIZE
-        self.rect.y = row * SPRITE_SIZE
+        self.set_cell_pos(col, row)
 
 
 class Floor(Sprite):
@@ -136,11 +135,7 @@ class Floor(Sprite):
             self.class_init()
         self.image = self.SPRITES[0].convert()
         self.rect = self.image.get_rect()
-        self.set_pos(col, row)
-
-    def set_pos(self, col, row):
-        self.rect.x = col * SPRITE_SIZE
-        self.rect.y = row * SPRITE_SIZE
+        self.set_cell_pos(col, row)
 
 
 class Player(Sprite):
@@ -156,9 +151,14 @@ class Player(Sprite):
         self.down_sprites = []
         self.load_sprites()
 
-        self.image = self.down_sprites[-1]
+        self.sprites = self.down_sprites
+        self.image = self.sprites[-1]
         self.rect = self.image.get_rect()
         self.set_cell_pos(col, row)
+
+        self.walk_to_pos = None
+        self.current_sprite_index = None
+        self.last_anim_tick = None
 
     def define_sprite_sheet(self):
         pass
@@ -174,10 +174,77 @@ class Player(Sprite):
 
     def move_to_cell(self, col, row, stop_group):
         """Перемещение в соседнню клетку"""
+        if self.walk_to_pos is not None:
+            return
         pos_before_move = self.rect.x, self.rect.y
         self.rect = self.rect.move(col * SPRITE_SIZE, row * SPRITE_SIZE)
-        if pygame.sprite.spritecollideany(self, stop_group):
-            self.set_pos(*pos_before_move)
+        pos_after_move = self.rect.x, self.rect.y
+        can_walk = not pygame.sprite.spritecollideany(self, stop_group)
+
+        if pos_after_move != pos_before_move:
+            self.change_sprites(pos_before_move, pos_after_move)
+        else:
+            return
+
+        if can_walk:
+            self.walk_to_pos = pos_after_move
+        else:
+            self.image = self.sprites[-1]
+            self.rect = self.image.get_rect()
+
+        self.set_pos(*pos_before_move)
+
+    def change_sprites(self, old_pos, new_pos):
+        if new_pos[0] < old_pos[0]:
+            self.sprites = self.left_sprites
+        elif new_pos[0] > old_pos[0]:
+            self.sprites = self.right_sprites
+        elif new_pos[1] < old_pos[1]:
+            self.sprites = self.up_sprites
+        elif new_pos[1] > old_pos[1]:
+            self.sprites = self.down_sprites
+
+    def update(self):
+        if self.walk_to_pos is None:
+            return
+
+        self.animate()
+
+        if self.walk_to_pos == (self.rect.x, self.rect.y):
+            self.reset_animation()
+
+    def animate(self):
+        now = pygame.time.get_ticks()
+        do_step = False
+        if self.last_anim_tick is None:
+            self.current_sprite_index = 0
+            do_step = True
+        elif now - self.last_anim_tick > PlAYER_ANIMATION_DURATION:
+            self.current_sprite_index = (self.current_sprite_index + 1) % len(self.sprites)
+            do_step = True
+
+        if do_step is True:
+            self.last_anim_tick = now
+            step = min([max([abs(self.walk_to_pos[0] - self.rect.x),
+                             abs(self.walk_to_pos[1] - self.rect.y)]), PLAYER_STEP])
+            self.change_sprites([self.rect.x, self.rect.y], self.walk_to_pos)
+            if self.walk_to_pos[0] < self.rect.x:
+                self.rect.x -= step
+            elif self.walk_to_pos[0] > self.rect.x:
+                self.rect.x += step
+            if self.walk_to_pos[1] < self.rect.y:
+                self.rect.y -= step
+            elif self.walk_to_pos[1] > self.rect.y:
+                self.rect.y += step
+            x, y = self.rect.x, self.rect.y
+            self.image = self.sprites[self.current_sprite_index]
+            self.rect = self.image.get_rect()
+            self.set_pos(x, y)
+
+    def reset_animation(self):
+        self.walk_to_pos = None
+        self.current_sprite_index = None
+        self.last_anim_tick = None
 
 
 class FirePlayer(Player):
@@ -263,11 +330,11 @@ class Game:
         self.running = True
         self.game_over = False
 
-        self.fire_player = None
-        self.water_player = None
-
         self.all_sprites = pygame.sprite.Group()
         self.wall_sprites = pygame.sprite.Group()
+
+        self.fire_player = None
+        self.water_player = None
 
         self.level = None
 
