@@ -172,6 +172,13 @@ class Player(Sprite):
                                                     SPRITE_SIZE, SPRITE_SIZE)
                 sprite_list.append(image)
 
+    def move_to_cell(self, col, row, stop_group):
+        """Перемещение в соседнню клетку"""
+        pos_before_move = self.rect.x, self.rect.y
+        self.rect = self.rect.move(col * SPRITE_SIZE, row * SPRITE_SIZE)
+        if pygame.sprite.spritecollideany(self, stop_group):
+            self.set_pos(*pos_before_move)
+
 
 class FirePlayer(Player):
     """Класс для игрока 'Огонь'"""
@@ -292,6 +299,23 @@ class Game:
             if event.type == pygame.QUIT:
                 self.game_over = True
                 self.running = False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_a:
+                    self.fire_player.move_to_cell(-1, 0, self.wall_sprites)
+                elif event.key == pygame.K_d:
+                    self.fire_player.move_to_cell(1, 0, self.wall_sprites)
+                elif event.key == pygame.K_w:
+                    self.fire_player.move_to_cell(0, -1, self.wall_sprites)
+                elif event.key == pygame.K_s:
+                    self.fire_player.move_to_cell(0, 1, self.wall_sprites)
+                elif event.key == pygame.K_LEFT:
+                    self.water_player.move_to_cell(-1, 0, self.wall_sprites)
+                elif event.key == pygame.K_RIGHT:
+                    self.water_player.move_to_cell(1, 0, self.wall_sprites)
+                elif event.key == pygame.K_UP:
+                    self.water_player.move_to_cell(0, -1, self.wall_sprites)
+                elif event.key == pygame.K_DOWN:
+                    self.water_player.move_to_cell(0, 1, self.wall_sprites)
 
     def update(self):
         """Обновление спрайтов"""
