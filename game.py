@@ -24,11 +24,12 @@ SPRITE_FILE_FLOOR = "floor.png"
 SPRITE_FILE_FIRE_PLAYER = "fire_player.png"
 SPRITE_FILE_WATER_PLAYER = "water_player.png"
 
-LEVEL_ELEM_EMPTY = " "
-LEVEL_ELEM_FLOOR = "."
-LEVEL_ELEM_WALL = "#"
-LEVEL_ELEM_FIRE_PLAYER = "1"
-LEVEL_ELEM_WATER_PLAYER = "2"
+LEVEL_BLOCK_EMPTY = " "
+LEVEL_BLOCK_FLOOR = "."
+LEVEL_BLOCK_WALL = "#"
+
+LEVEL_ELEM_FIRE_PLAYER = "f"
+LEVEL_ELEM_WATER_PLAYER = "w"
 
 PLAYER_STEP = SPRITE_SIZE // 8
 PlAYER_ANIMATION_DURATION = 100
@@ -268,18 +269,18 @@ class Level:
         fullname = os.path.join(LEVELS_DIR, filename)
 
         with open(fullname) as f:
-            data = [line.strip() for line in f.readlines()]
+            data = [line.rstrip() for line in f.readlines()]
 
         self.width = max(map(len, data))
         self.height = len(data)
-        data = list(map(lambda x: x.ljust(self.width, LEVEL_ELEM_EMPTY), data))
+        data = list(map(lambda x: x.ljust(self.width, LEVEL_BLOCK_EMPTY), data))
 
-        blocks_set = {LEVEL_ELEM_WALL, LEVEL_ELEM_FLOOR, LEVEL_ELEM_EMPTY}
+        blocks_set = {LEVEL_BLOCK_WALL, LEVEL_BLOCK_FLOOR, LEVEL_BLOCK_EMPTY}
         self.blocks = [[0] * self.width for _ in range(self.height)]
         self.indexes = [[0] * self.width for _ in range(self.height)]
         for row, line in enumerate(data):
             for col, elem in enumerate(line):
-                self.blocks[row][col] = elem if elem in blocks_set else LEVEL_ELEM_FLOOR
+                self.blocks[row][col] = elem if elem in blocks_set else LEVEL_BLOCK_FLOOR
                 if elem == LEVEL_ELEM_FIRE_PLAYER:
                     self.fire_player_pos = col, row
                 elif elem == LEVEL_ELEM_WATER_PLAYER:
@@ -334,9 +335,11 @@ class Game:
         self.level = Level('level1.txt')
         for row in range(self.level.height):
             for col in range(self.level.width):
-                if self.level.blocks[row][col] == LEVEL_ELEM_WALL:
+                if self.level.blocks[row][col] == LEVEL_BLOCK_WALL:
                     level_sprite = Wall(col, row, self.level.indexes[row][col])
                     self.wall_sprites.add(level_sprite)
+                elif self.level.blocks[row][col] == LEVEL_BLOCK_EMPTY:
+                    continue
                 else:
                     level_sprite = Floor(col, row, self.level.indexes[row][col])
 
