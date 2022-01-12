@@ -21,12 +21,18 @@ IMG_DIR = os.path.join(CURRENT_DIR, 'img')
 
 SPRITE_FILE_WALLS = "walls.png"
 SPRITE_FILE_FLOOR = "floor.png"
+SPRITE_FILE_LAVA = "lava.png"
+SPRITE_FILE_RIVER = "river.png"
+SPRITE_FILE_ACID = "acid.png"
 SPRITE_FILE_FIRE_PLAYER = "fire_player.png"
 SPRITE_FILE_WATER_PLAYER = "water_player.png"
 
 LEVEL_BLOCK_EMPTY = " "
 LEVEL_BLOCK_FLOOR = "."
 LEVEL_BLOCK_WALL = "#"
+LEVEL_BLOCK_LAVA = "L"
+LEVEL_BLOCK_RIVER = "R"
+LEVEL_BLOCK_ACID = "A"
 
 LEVEL_ELEM_FIRE_PLAYER = "f"
 LEVEL_ELEM_WATER_PLAYER = "w"
@@ -130,6 +136,24 @@ class Floor(BlockSprite):
     """Класс для спрайта пола"""
     def define_sprite_sheet(self):
         self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_FLOOR))
+
+
+class Lava(BlockSprite):
+    """Класс для спрайта лавы"""
+    def define_sprite_sheet(self):
+        self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_LAVA))
+
+
+class River(BlockSprite):
+    """Класс для спрайта реки"""
+    def define_sprite_sheet(self):
+        self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_RIVER))
+
+
+class Acid(BlockSprite):
+    """Класс для спрайта реки"""
+    def define_sprite_sheet(self):
+        self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_ACID))
 
 
 class Player(Sprite):
@@ -275,7 +299,8 @@ class Level:
         self.height = len(data)
         data = list(map(lambda x: x.ljust(self.width, LEVEL_BLOCK_EMPTY), data))
 
-        blocks_set = {LEVEL_BLOCK_WALL, LEVEL_BLOCK_FLOOR, LEVEL_BLOCK_EMPTY}
+        blocks_set = {LEVEL_BLOCK_WALL, LEVEL_BLOCK_FLOOR, LEVEL_BLOCK_EMPTY,
+                      LEVEL_BLOCK_LAVA, LEVEL_BLOCK_RIVER, LEVEL_BLOCK_ACID}
         self.blocks = [[0] * self.width for _ in range(self.height)]
         self.indexes = [[0] * self.width for _ in range(self.height)]
         for row, line in enumerate(data):
@@ -338,6 +363,12 @@ class Game:
                 if self.level.blocks[row][col] == LEVEL_BLOCK_WALL:
                     level_sprite = Wall(col, row, self.level.indexes[row][col])
                     self.wall_sprites.add(level_sprite)
+                elif self.level.blocks[row][col] == LEVEL_BLOCK_LAVA:
+                    level_sprite = Lava(col, row, self.level.indexes[row][col])
+                elif self.level.blocks[row][col] == LEVEL_BLOCK_RIVER:
+                    level_sprite = River(col, row, self.level.indexes[row][col])
+                elif self.level.blocks[row][col] == LEVEL_BLOCK_ACID:
+                    level_sprite = Acid(col, row, self.level.indexes[row][col])
                 elif self.level.blocks[row][col] == LEVEL_BLOCK_EMPTY:
                     continue
                 else:
