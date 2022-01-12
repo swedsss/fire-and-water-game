@@ -129,7 +129,8 @@ class Floor(Sprite):
 
     @classmethod
     def class_init(cls):
-        cls.SPRITES = [load_image(os.path.join(IMG_DIR, SPRITE_FILE_FLOOR))]
+        edge_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_FLOOR))
+        cls.SPRITES = [edge_sheet.get_image_by_index(i) for i in range(16)]
         cls.class_init_done = True
 
     def __init__(self, col, row):
