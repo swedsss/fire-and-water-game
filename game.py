@@ -1,7 +1,7 @@
 import sys
 import os
 import pygame
-
+from typing import Optional
 
 SPRITE_SIZE = 32
 MAX_LEVEL_SIZE = 25
@@ -24,6 +24,7 @@ SPRITE_FILE_FLOOR = "floor.png"
 SPRITE_FILE_FIRE_PLAYER = "fire_player.png"
 SPRITE_FILE_WATER_PLAYER = "water_player.png"
 
+LEVEL_ELEM_EMPTY = " "
 LEVEL_ELEM_FLOOR = "."
 LEVEL_ELEM_WALL = "#"
 LEVEL_ELEM_FIRE_PLAYER = "1"
@@ -102,51 +103,39 @@ class Sprite(pygame.sprite.Sprite):
         self.set_pos(col * SPRITE_SIZE + SPRITE_SIZE // 2, row * SPRITE_SIZE + SPRITE_SIZE // 2)
 
 
-class Wall(Sprite):
-    """Класс для спрайта стены"""
-    class_init_done = False
-    SPRITES = []
-
-    @classmethod
-    def class_init(cls):
-        edge_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_WALLS))
-        cls.SPRITES = [edge_sheet.get_image_by_index(i) for i in range(16)]
-        cls.class_init_done = True
-
+class BlockSprite(Sprite):
+    """Общий класс для спрайтов, отображающих блоки уровня.
+       Спрайты этих блоков зависят от соседних ячеек того же класса."""
     def __init__(self, col, row, index):
         super().__init__()
-        if self.class_init_done is False:
-            self.class_init()
-        self.image = self.SPRITES[index].convert()
+        self.sprite_sheet: Optional[EdgeSpriteSheet] = None
+        self.define_sprite_sheet()
+
+        self.image = self.sprite_sheet.get_image_by_index(index)
         self.rect = self.image.get_rect()
         self.set_cell_pos(col, row)
 
+    def define_sprite_sheet(self):
+        pass
 
-class Floor(Sprite):
+
+class Wall(BlockSprite):
+    """Класс для спрайта стены"""
+    def define_sprite_sheet(self):
+        self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_WALLS))
+
+
+class Floor(BlockSprite):
     """Класс для спрайта пола"""
-    class_init_done = False
-    SPRITES = None
-
-    @classmethod
-    def class_init(cls):
-        edge_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_FLOOR))
-        cls.SPRITES = [edge_sheet.get_image_by_index(i) for i in range(16)]
-        cls.class_init_done = True
-
-    def __init__(self, col, row):
-        super().__init__()
-        if self.class_init_done is False:
-            self.class_init()
-        self.image = self.SPRITES[0].convert()
-        self.rect = self.image.get_rect()
-        self.set_cell_pos(col, row)
+    def define_sprite_sheet(self):
+        self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_FLOOR))
 
 
 class Player(Sprite):
     """Общий класс для игроков"""
     def __init__(self, col, row):
         super().__init__()
-        self.sprite_sheet = None
+        self.sprite_sheet: Optional[SpriteSheet] = None
         self.define_sprite_sheet()
 
         self.left_sprites = []
@@ -253,18 +242,12 @@ class Player(Sprite):
 
 class FirePlayer(Player):
     """Класс для игрока 'Огонь'"""
-    def __init__(self, col, row):
-        super().__init__(col, row)
-
     def define_sprite_sheet(self):
         self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_FIRE_PLAYER))
 
 
 class WaterPlayer(Player):
     """Класс для игрока 'Вода'"""
-    def __init__(self, col, row):
-        super().__init__(col, row)
-
     def define_sprite_sheet(self):
         self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_WATER_PLAYER))
 
@@ -274,7 +257,8 @@ class Level:
     def __init__(self, filename):
         self.filename = filename
         self.width, self.height = 0, 0
-        self.elems = []
+        self.blocks = []
+        self.indexes = []
         self.fire_player_pos = None
         self.water_player_pos = None
         self.load_level(filename)
@@ -288,35 +272,36 @@ class Level:
 
         self.width = max(map(len, data))
         self.height = len(data)
-        data = list(map(lambda x: x.ljust(self.width, '.'), data))
+        data = list(map(lambda x: x.ljust(self.width, LEVEL_ELEM_EMPTY), data))
 
-        self.elems = [[-1] * self.width for _ in range(self.height)]
+        blocks_set = {LEVEL_ELEM_WALL, LEVEL_ELEM_FLOOR, LEVEL_ELEM_EMPTY}
+        self.blocks = [[0] * self.width for _ in range(self.height)]
+        self.indexes = [[0] * self.width for _ in range(self.height)]
         for row, line in enumerate(data):
             for col, elem in enumerate(line):
-                if elem == LEVEL_ELEM_WALL:
-                    self.elems[row][col] = 0
-                elif elem == LEVEL_ELEM_FIRE_PLAYER:
+                self.blocks[row][col] = elem if elem in blocks_set else LEVEL_ELEM_FLOOR
+                if elem == LEVEL_ELEM_FIRE_PLAYER:
                     self.fire_player_pos = col, row
                 elif elem == LEVEL_ELEM_WATER_PLAYER:
                     self.water_player_pos = col, row
 
-        self.connect_near_walls()
+        self.calculate_indexes()
 
-    def connect_near_walls(self):
-        """Расчёт индекса отображаемого спрайта стены с учётом соседних стен"""
+    def calculate_indexes(self):
+        """Расчёт индексов блоков уровня с учётом соседних блоков того же типа"""
         for row in range(self.height):
             for col in range(self.width):
-                if self.elems[row][col] < 0:
+                if self.indexes[row][col] < 0:
                     continue
-                wall_index = 0
+                index = 0
                 near_list = [(col, row - 1, 1), (col + 1, row, 2),
                              (col, row + 1, 4), (col - 1, row, 8)]
                 for near_col, near_row, weight in near_list:
                     if not self.cell_on_board(near_col, near_row):
                         continue
-                    if self.elems[near_row][near_col] >= 0:
-                        wall_index += weight
-                self.elems[row][col] = wall_index
+                    if self.blocks[near_row][near_col] == self.blocks[row][col]:
+                        index += weight
+                self.indexes[row][col] = index
 
     def cell_on_board(self, col, row):
         """Проверка на присутствие координат на игровом уровне"""
@@ -349,11 +334,11 @@ class Game:
         self.level = Level('level1.txt')
         for row in range(self.level.height):
             for col in range(self.level.width):
-                if self.level.elems[row][col] >= 0:
-                    level_sprite = Wall(col, row, self.level.elems[row][col])
+                if self.level.blocks[row][col] == LEVEL_ELEM_WALL:
+                    level_sprite = Wall(col, row, self.level.indexes[row][col])
                     self.wall_sprites.add(level_sprite)
                 else:
-                    level_sprite = Floor(col, row)
+                    level_sprite = Floor(col, row, self.level.indexes[row][col])
 
                 self.all_sprites.add(level_sprite)
 
