@@ -174,6 +174,9 @@ class Player(Sprite):
         self.rect = self.image.get_rect()
         self.set_cell_pos(col, row)
 
+        self.alive = True
+        self.death_groups = []
+
         self.walk_to_pos = None
         self.current_sprite_index = None
         self.last_anim_tick = None
@@ -189,6 +192,9 @@ class Player(Sprite):
                 image = self.sprite_sheet.get_image(col * SPRITE_SIZE, row * SPRITE_SIZE,
                                                     SPRITE_SIZE, SPRITE_SIZE)
                 sprite_list.append(image)
+
+    def add_death_group(self, group):
+        self.death_groups.append(group)
 
     def move_to_cell(self, col, row, stop_group):
         """Перемещение в соседнню клетку"""
@@ -230,6 +236,7 @@ class Player(Sprite):
 
         if self.walk_to_pos == self.get_pos():
             self.reset_animation()
+            self.after_move_checks()
 
     def animate(self):
         now = pygame.time.get_ticks()
@@ -263,6 +270,12 @@ class Player(Sprite):
         self.walk_to_pos = None
         self.current_sprite_index = None
         self.last_anim_tick = None
+
+    def after_move_checks(self):
+        """Проверки после перемещения персонажа в соседнюю клетку"""
+        for death_group in self.death_groups:
+            if pygame.sprite.spritecollideany(self, death_group):
+                self.alive = False
 
 
 class FirePlayer(Player):
@@ -347,6 +360,9 @@ class Game:
 
         self.all_sprites = pygame.sprite.Group()
         self.wall_sprites = pygame.sprite.Group()
+        self.lava_sprites = pygame.sprite.Group()
+        self.river_sprites = pygame.sprite.Group()
+        self.acid_sprites = pygame.sprite.Group()
 
         self.fire_player = None
         self.water_player = None
@@ -365,10 +381,13 @@ class Game:
                     self.wall_sprites.add(level_sprite)
                 elif self.level.blocks[row][col] == LEVEL_BLOCK_LAVA:
                     level_sprite = Lava(col, row, self.level.indexes[row][col])
+                    self.lava_sprites.add(level_sprite)
                 elif self.level.blocks[row][col] == LEVEL_BLOCK_RIVER:
                     level_sprite = River(col, row, self.level.indexes[row][col])
+                    self.river_sprites.add(level_sprite)
                 elif self.level.blocks[row][col] == LEVEL_BLOCK_ACID:
                     level_sprite = Acid(col, row, self.level.indexes[row][col])
+                    self.acid_sprites.add(level_sprite)
                 elif self.level.blocks[row][col] == LEVEL_BLOCK_EMPTY:
                     continue
                 else:
@@ -379,9 +398,13 @@ class Game:
         if self.level.fire_player_pos is not None:
             self.fire_player = FirePlayer(*self.level.fire_player_pos)
             self.all_sprites.add(self.fire_player)
+            for group in [self.river_sprites, self.acid_sprites]:
+                self.fire_player.add_death_group(group)
         if self.level.water_player_pos is not None:
             self.water_player = WaterPlayer(*self.level.water_player_pos)
             self.all_sprites.add(self.water_player)
+            for group in [self.lava_sprites, self.acid_sprites]:
+                self.water_player.add_death_group(group)
 
     def process_events(self):
         """Обработка событий игры"""
@@ -410,6 +433,12 @@ class Game:
     def update(self):
         """Обновление спрайтов"""
         self.all_sprites.update()
+
+        for player in [self.fire_player, self.water_player]:
+            if not player.alive:
+                print("Game over")
+                self.game_over = True
+                self.running = False
 
     def display(self):
         """Отрисовка элементов игры"""
