@@ -1,7 +1,7 @@
 import sys
 import os
 import pygame
-from typing import Optional
+from typing import Optional, Union
 
 SPRITE_SIZE = 32
 MAX_LEVEL_SIZE = 25
@@ -35,11 +35,14 @@ LEVEL_BLOCK_LAVA = "L"
 LEVEL_BLOCK_RIVER = "R"
 LEVEL_BLOCK_ACID = "A"
 
-LEVEL_ELEM_FIRE_PLAYER = "f"
-LEVEL_ELEM_WATER_PLAYER = "w"
+LEVEL_PLAYER_FIRE = "f"
+LEVEL_PLAYER_WATER = "w"
+
+LEVEL_ELEM_RUBY = "<"
+LEVEL_ELEM_AQUAMARINE = ">"
 
 PLAYER_STEP = SPRITE_SIZE // 8
-PlAYER_ANIMATION_DURATION = 100
+PlAYER_ANIMATION_DURATION = 10
 
 
 def load_image(name, colorkey=None):
@@ -319,6 +322,10 @@ class ElementSprite(Sprite):
         self.image = self.images[1] if self.is_active else self.images[0]
         self.rect = self.image.get_rect()
 
+    def interact_with(self, player, fire_player, water_player):
+        """Взаимодействие игрока с текущим элементом"""
+        pass
+
 
 class Ruby(ElementSprite):
     """Класс для камня 'Рубин'"""
@@ -327,6 +334,10 @@ class Ruby(ElementSprite):
         active_image = self.sprite_sheet.get_cell_image(0, 0)
         self.images = [inactive_image, active_image]
 
+    def interact_with(self, player, fire_player, water_player):
+        if player == fire_player:
+            self.kill()
+
 
 class Aquamarine(ElementSprite):
     """Класс для камня 'Аквамарин'"""
@@ -334,6 +345,10 @@ class Aquamarine(ElementSprite):
         inactive_image = self.sprite_sheet.get_cell_image(1, 0)
         active_image = self.sprite_sheet.get_cell_image(1, 0)
         self.images = [inactive_image, active_image]
+
+    def interact_with(self, player, fire_player, water_player):
+        if player == water_player:
+            self.kill()
 
 
 class Level:
@@ -345,6 +360,7 @@ class Level:
         self.indexes = []
         self.fire_player_pos = None
         self.water_player_pos = None
+        self.elem_pos_dict = dict()
         self.load_level(filename)
 
     def load_level(self, filename):
@@ -360,16 +376,22 @@ class Level:
 
         blocks_set = {LEVEL_BLOCK_WALL, LEVEL_BLOCK_FLOOR, LEVEL_BLOCK_EMPTY,
                       LEVEL_BLOCK_LAVA, LEVEL_BLOCK_RIVER, LEVEL_BLOCK_ACID}
+        elem_set = {LEVEL_ELEM_RUBY, LEVEL_ELEM_AQUAMARINE}
+
         self.blocks = [[0] * self.width for _ in range(self.height)]
-        self.indexes = [[0] * self.width for _ in range(self.height)]
         for row, line in enumerate(data):
             for col, elem in enumerate(line):
                 self.blocks[row][col] = elem if elem in blocks_set else LEVEL_BLOCK_FLOOR
-                if elem == LEVEL_ELEM_FIRE_PLAYER:
+                if elem == LEVEL_PLAYER_FIRE:
                     self.fire_player_pos = col, row
-                elif elem == LEVEL_ELEM_WATER_PLAYER:
+                elif elem == LEVEL_PLAYER_WATER:
                     self.water_player_pos = col, row
+                elif elem in elem_set:
+                    if elem not in self.elem_pos_dict:
+                        self.elem_pos_dict[elem] = set()
+                    self.elem_pos_dict[elem].add((col, row))
 
+        self.indexes = [[0] * self.width for _ in range(self.height)]
         self.calculate_indexes()
 
     def calculate_indexes(self):
@@ -409,6 +431,7 @@ class Game:
         self.lava_sprites = pygame.sprite.Group()
         self.river_sprites = pygame.sprite.Group()
         self.acid_sprites = pygame.sprite.Group()
+        self.elements_group = pygame.sprite.Group()
 
         self.fire_player = None
         self.water_player = None
@@ -439,6 +462,17 @@ class Game:
                 else:
                     level_sprite = Floor(col, row, self.level.indexes[row][col])
 
+                self.all_sprites.add(level_sprite)
+
+        for elem in self.level.elem_pos_dict:
+            for col, row in self.level.elem_pos_dict[elem]:
+                if elem == LEVEL_ELEM_RUBY:
+                    level_sprite = Ruby(col, row)
+                elif elem == LEVEL_ELEM_AQUAMARINE:
+                    level_sprite = Aquamarine(col, row)
+                else:
+                    continue
+                self.elements_group.add(level_sprite)
                 self.all_sprites.add(level_sprite)
 
         if self.level.fire_player_pos is not None:
@@ -475,6 +509,19 @@ class Game:
                     self.water_player.move_to_cell(0, -1, self.wall_sprites)
                 elif event.key == pygame.K_DOWN:
                     self.water_player.move_to_cell(0, 1, self.wall_sprites)
+
+            # Если нажаты левый и/или правый SHIFT,
+            # то соответствующий игрок взаимодействует с предметом, с которым пересекается
+            player_list = []
+            if pygame.key.get_mods() & pygame.KMOD_LSHIFT:
+                player_list.append(self.fire_player)
+            if pygame.key.get_mods() & pygame.KMOD_RSHIFT:
+                player_list.append(self.water_player)
+            for player in player_list:
+                elem_sprite: Union[pygame.sprite.Sprite, ElementSprite]
+                elem_sprite = pygame.sprite.spritecollideany(player, self.elements_group)
+                if elem_sprite is not None:
+                    elem_sprite.interact_with(player, self.fire_player, self.water_player)
 
     def update(self):
         """Обновление спрайтов"""
