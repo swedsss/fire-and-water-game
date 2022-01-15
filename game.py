@@ -40,6 +40,8 @@ LEVEL_PLAYER_WATER = "w"
 
 LEVEL_ELEM_RUBY = "<"
 LEVEL_ELEM_AQUAMARINE = ">"
+LEVEL_ELEM_FIRE_EXIT = "F"
+LEVEL_ELEM_WATER_EXIT = "W"
 
 PLAYER_STEP = SPRITE_SIZE // 8
 PlAYER_ANIMATION_DURATION = 10
@@ -300,6 +302,10 @@ class WaterPlayer(Player):
 
 class ElementSprite(Sprite):
     """Общий класс для элементов, с которыми могут взаимодействовать игроки"""
+
+    fire_player = None
+    water_player = None
+
     def __init__(self, col, row):
         super().__init__()
         self.is_active = False
@@ -307,6 +313,7 @@ class ElementSprite(Sprite):
         self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_ELEMENTS))
         self.images = []
         self.load_images()
+        self.sprite_sheet = None
 
         self.image: Optional[pygame.Surface] = None
         self.set_active(False)
@@ -318,11 +325,13 @@ class ElementSprite(Sprite):
         self.images = [image for _ in range(2)]
 
     def set_active(self, active):
+        pos = self.get_pos()
         self.is_active = active
         self.image = self.images[1] if self.is_active else self.images[0]
         self.rect = self.image.get_rect()
+        self.set_pos(*pos)
 
-    def interact_with(self, player, fire_player, water_player):
+    def interact_with(self, player):
         """Взаимодействие игрока с текущим элементом"""
         pass
 
@@ -334,8 +343,8 @@ class Ruby(ElementSprite):
         active_image = self.sprite_sheet.get_cell_image(0, 0)
         self.images = [inactive_image, active_image]
 
-    def interact_with(self, player, fire_player, water_player):
-        if player == fire_player:
+    def interact_with(self, player):
+        if player == self.fire_player:
             self.kill()
 
 
@@ -346,9 +355,31 @@ class Aquamarine(ElementSprite):
         active_image = self.sprite_sheet.get_cell_image(1, 0)
         self.images = [inactive_image, active_image]
 
-    def interact_with(self, player, fire_player, water_player):
-        if player == water_player:
+    def interact_with(self, player):
+        if player == self.water_player:
             self.kill()
+
+
+class FireExit(ElementSprite):
+    """Класс для завершения уровня для игрока 'Огонь'"""
+    def load_images(self):
+        inactive_image = self.sprite_sheet.get_cell_image(0, 1)
+        active_image = self.sprite_sheet.get_cell_image(1, 1)
+        self.images = [inactive_image, active_image]
+
+    def interact_with(self, player):
+        pass
+
+
+class WaterExit(ElementSprite):
+    """Класс для завершения уровня для игрока 'Огонь'"""
+    def load_images(self):
+        inactive_image = self.sprite_sheet.get_cell_image(2, 1)
+        active_image = self.sprite_sheet.get_cell_image(3, 1)
+        self.images = [inactive_image, active_image]
+
+    def interact_with(self, player):
+        pass
 
 
 class Level:
@@ -374,9 +405,10 @@ class Level:
         self.height = len(data)
         data = list(map(lambda x: x.ljust(self.width, LEVEL_BLOCK_EMPTY), data))
 
-        blocks_set = {LEVEL_BLOCK_WALL, LEVEL_BLOCK_FLOOR, LEVEL_BLOCK_EMPTY,
+        blocks_set = {LEVEL_BLOCK_EMPTY, LEVEL_BLOCK_WALL, LEVEL_BLOCK_FLOOR,
                       LEVEL_BLOCK_LAVA, LEVEL_BLOCK_RIVER, LEVEL_BLOCK_ACID}
-        elem_set = {LEVEL_ELEM_RUBY, LEVEL_ELEM_AQUAMARINE}
+        elem_set = {LEVEL_ELEM_RUBY, LEVEL_ELEM_AQUAMARINE,
+                    LEVEL_ELEM_FIRE_EXIT, LEVEL_ELEM_WATER_EXIT}
 
         self.blocks = [[0] * self.width for _ in range(self.height)]
         for row, line in enumerate(data):
@@ -431,6 +463,7 @@ class Game:
         self.lava_sprites = pygame.sprite.Group()
         self.river_sprites = pygame.sprite.Group()
         self.acid_sprites = pygame.sprite.Group()
+
         self.elements_group = pygame.sprite.Group()
 
         self.fire_player = None
@@ -464,27 +497,33 @@ class Game:
 
                 self.all_sprites.add(level_sprite)
 
+        if self.level.fire_player_pos is not None:
+            self.fire_player = FirePlayer(*self.level.fire_player_pos)
+            self.all_sprites.add(self.fire_player)
+            for group in [self.river_sprites, self.acid_sprites]:
+                self.fire_player.add_death_group(group)
+            ElementSprite.fire_player = self.fire_player
+        if self.level.water_player_pos is not None:
+            self.water_player = WaterPlayer(*self.level.water_player_pos)
+            self.all_sprites.add(self.water_player)
+            for group in [self.lava_sprites, self.acid_sprites]:
+                self.water_player.add_death_group(group)
+            ElementSprite.water_player = self.water_player
+
         for elem in self.level.elem_pos_dict:
             for col, row in self.level.elem_pos_dict[elem]:
                 if elem == LEVEL_ELEM_RUBY:
                     level_sprite = Ruby(col, row)
                 elif elem == LEVEL_ELEM_AQUAMARINE:
                     level_sprite = Aquamarine(col, row)
+                elif elem == LEVEL_ELEM_FIRE_EXIT:
+                    level_sprite = FireExit(col, row)
+                elif elem == LEVEL_ELEM_WATER_EXIT:
+                    level_sprite = WaterExit(col, row)
                 else:
                     continue
                 self.elements_group.add(level_sprite)
                 self.all_sprites.add(level_sprite)
-
-        if self.level.fire_player_pos is not None:
-            self.fire_player = FirePlayer(*self.level.fire_player_pos)
-            self.all_sprites.add(self.fire_player)
-            for group in [self.river_sprites, self.acid_sprites]:
-                self.fire_player.add_death_group(group)
-        if self.level.water_player_pos is not None:
-            self.water_player = WaterPlayer(*self.level.water_player_pos)
-            self.all_sprites.add(self.water_player)
-            for group in [self.lava_sprites, self.acid_sprites]:
-                self.water_player.add_death_group(group)
 
     def process_events(self):
         """Обработка событий игры"""
@@ -510,18 +549,19 @@ class Game:
                 elif event.key == pygame.K_DOWN:
                     self.water_player.move_to_cell(0, 1, self.wall_sprites)
 
-            # Если нажаты левый и/или правый SHIFT,
+            pressed_key = pygame.key.get_pressed()
+            # Если нажаты левый и/или правый CTRL,
             # то соответствующий игрок взаимодействует с предметом, с которым пересекается
-            player_list = []
-            if pygame.key.get_mods() & pygame.KMOD_LSHIFT:
-                player_list.append(self.fire_player)
-            if pygame.key.get_mods() & pygame.KMOD_RSHIFT:
-                player_list.append(self.water_player)
-            for player in player_list:
+            interaction_list = []
+            if pressed_key[pygame.K_LCTRL]:
+                interaction_list.append(self.fire_player)
+            if pressed_key[pygame.K_RCTRL]:
+                interaction_list.append(self.water_player)
+            for player in interaction_list:
                 elem_sprite: Union[pygame.sprite.Sprite, ElementSprite]
                 elem_sprite = pygame.sprite.spritecollideany(player, self.elements_group)
                 if elem_sprite is not None:
-                    elem_sprite.interact_with(player, self.fire_player, self.water_player)
+                    elem_sprite.interact_with(player)
 
     def update(self):
         """Обновление спрайтов"""
