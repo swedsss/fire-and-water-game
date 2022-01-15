@@ -44,7 +44,7 @@ LEVEL_ELEM_FIRE_EXIT = "F"
 LEVEL_ELEM_WATER_EXIT = "W"
 
 PLAYER_STEP = SPRITE_SIZE // 8
-PlAYER_ANIMATION_DURATION = 10
+PlAYER_ANIMATION_DURATION = 100
 
 
 def load_image(name, colorkey=None):
@@ -72,6 +72,7 @@ def load_image(name, colorkey=None):
 
 class SpriteSheet:
     """Набор спрайтов"""
+
     def __init__(self, file_name):
         self.sprite_sheet = pygame.image.load(file_name).convert()
 
@@ -103,9 +104,16 @@ class EdgeSpriteSheet(SpriteSheet):
 
 class Sprite(pygame.sprite.Sprite):
     """Общий класс для всех спрайтов на экране"""
+
+    @staticmethod
+    def get_empty_image(width=SPRITE_SIZE, height=SPRITE_SIZE):
+        image = pygame.Surface((width, height)).convert()
+        image.set_colorkey(BLACK)
+        return image
+
     def __init__(self):
         super().__init__()
-        self.image = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE)).convert()
+        self.image = self.get_empty_image()
         self.rect = self.image.get_rect()
 
     def get_pos(self):
@@ -122,6 +130,7 @@ class Sprite(pygame.sprite.Sprite):
 class BlockSprite(Sprite):
     """Общий класс для спрайтов, отображающих блоки уровня.
        Спрайты этих блоков зависят от соседних ячеек того же класса."""
+
     def __init__(self, col, row, index):
         super().__init__()
         self.sprite_sheet: Optional[EdgeSpriteSheet] = None
@@ -139,36 +148,42 @@ class BlockSprite(Sprite):
 
 class Wall(BlockSprite):
     """Класс для спрайта стены"""
+
     def define_sprite_sheet(self):
         self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_WALLS))
 
 
 class Floor(BlockSprite):
     """Класс для спрайта пола"""
+
     def define_sprite_sheet(self):
         self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_FLOOR))
 
 
 class Lava(BlockSprite):
     """Класс для спрайта лавы"""
+
     def define_sprite_sheet(self):
         self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_LAVA))
 
 
 class River(BlockSprite):
     """Класс для спрайта реки"""
+
     def define_sprite_sheet(self):
         self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_RIVER))
 
 
 class Acid(BlockSprite):
     """Класс для спрайта кислоты"""
+
     def define_sprite_sheet(self):
         self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_ACID))
 
 
 class Player(Sprite):
     """Общий класс для игроков"""
+
     def __init__(self, col, row):
         super().__init__()
         self.sprite_sheet: Optional[SpriteSheet] = None
@@ -290,12 +305,14 @@ class Player(Sprite):
 
 class FirePlayer(Player):
     """Класс для игрока 'Огонь'"""
+
     def define_sprite_sheet(self):
         self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_FIRE_PLAYER))
 
 
 class WaterPlayer(Player):
     """Класс для игрока 'Вода'"""
+
     def define_sprite_sheet(self):
         self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_WATER_PLAYER))
 
@@ -309,6 +326,7 @@ class ElementSprite(Sprite):
     def __init__(self, col, row):
         super().__init__()
         self.is_active = False
+        self.is_interacted = False
 
         self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_ELEMENTS))
         self.images = []
@@ -321,7 +339,7 @@ class ElementSprite(Sprite):
 
     def load_images(self):
         """Загрузка 2х спрайтов, для элемента в неактивном и активном состоянии"""
-        image = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE)).convert()
+        image = self.get_empty_image()
         self.images = [image for _ in range(2)]
 
     def set_active(self, active):
@@ -335,28 +353,45 @@ class ElementSprite(Sprite):
         """Взаимодействие игрока с текущим элементом"""
         pass
 
+    def reset_interaction(self):
+        self.is_interacted = False
+
 
 class Ruby(ElementSprite):
     """Класс для камня 'Рубин'"""
+
+    def __init__(self, col, row):
+        super().__init__(col, row)
+        self.set_active(True)
+
     def load_images(self):
-        inactive_image = self.sprite_sheet.get_cell_image(0, 0)
+        inactive_image = self.get_empty_image()
         active_image = self.sprite_sheet.get_cell_image(0, 0)
         self.images = [inactive_image, active_image]
 
     def interact_with(self, player):
         if player == self.fire_player:
+            self.is_interacted = True
+            self.set_active(False)
             self.kill()
 
 
 class Aquamarine(ElementSprite):
     """Класс для камня 'Аквамарин'"""
+
+    def __init__(self, col, row):
+        super().__init__(col, row)
+        self.set_active(True)
+
     def load_images(self):
-        inactive_image = self.sprite_sheet.get_cell_image(1, 0)
+        inactive_image = self.get_empty_image()
         active_image = self.sprite_sheet.get_cell_image(1, 0)
         self.images = [inactive_image, active_image]
 
     def interact_with(self, player):
         if player == self.water_player:
+            self.is_interacted = True
+            self.set_active(False)
             self.kill()
 
 
@@ -368,7 +403,8 @@ class FireExit(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def interact_with(self, player):
-        pass
+        if self.is_active and player == self.fire_player:
+            self.is_interacted = True
 
 
 class WaterExit(ElementSprite):
@@ -379,11 +415,13 @@ class WaterExit(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def interact_with(self, player):
-        pass
+        if self.is_active and player == self.water_player:
+            self.is_interacted = True
 
 
 class Level:
     """Уровень игры"""
+
     def __init__(self, filename):
         self.filename = filename
         self.width, self.height = 0, 0
@@ -449,6 +487,7 @@ class Level:
 
 class Game:
     """Основной класс игры"""
+
     def __init__(self):
         pygame.init()
         pygame.display.set_caption(TITLE)
@@ -465,9 +504,13 @@ class Game:
         self.acid_sprites = pygame.sprite.Group()
 
         self.elements_group = pygame.sprite.Group()
+        self.ruby_group = pygame.sprite.Group()
+        self.aquamarine_group = pygame.sprite.Group()
 
         self.fire_player = None
         self.water_player = None
+        self.fire_exit = None
+        self.water_exit = None
 
         self.level = None
 
@@ -514,16 +557,22 @@ class Game:
             for col, row in self.level.elem_pos_dict[elem]:
                 if elem == LEVEL_ELEM_RUBY:
                     level_sprite = Ruby(col, row)
+                    self.ruby_group.add(level_sprite)
                 elif elem == LEVEL_ELEM_AQUAMARINE:
                     level_sprite = Aquamarine(col, row)
+                    self.aquamarine_group.add(level_sprite)
                 elif elem == LEVEL_ELEM_FIRE_EXIT:
                     level_sprite = FireExit(col, row)
+                    self.fire_exit = level_sprite
                 elif elem == LEVEL_ELEM_WATER_EXIT:
                     level_sprite = WaterExit(col, row)
+                    self.water_exit = level_sprite
                 else:
                     continue
                 self.elements_group.add(level_sprite)
                 self.all_sprites.add(level_sprite)
+
+        self.do_interaction_checks()
 
     def process_events(self):
         """Обработка событий игры"""
@@ -549,19 +598,31 @@ class Game:
                 elif event.key == pygame.K_DOWN:
                     self.water_player.move_to_cell(0, 1, self.wall_sprites)
 
-            pressed_key = pygame.key.get_pressed()
-            # Если нажаты левый и/или правый CTRL,
-            # то соответствующий игрок взаимодействует с предметом, с которым пересекается
-            interaction_list = []
-            if pressed_key[pygame.K_LCTRL]:
-                interaction_list.append(self.fire_player)
-            if pressed_key[pygame.K_RCTRL]:
-                interaction_list.append(self.water_player)
-            for player in interaction_list:
-                elem_sprite: Union[pygame.sprite.Sprite, ElementSprite]
-                elem_sprite = pygame.sprite.spritecollideany(player, self.elements_group)
-                if elem_sprite is not None:
-                    elem_sprite.interact_with(player)
+        pressed_key = pygame.key.get_pressed()
+        # Если нажаты левый и/или правый CTRL,
+        # то соответствующий игрок взаимодействует с предметом, с которым пересекается
+        interaction_list = []
+        interaction = False
+        if pressed_key[pygame.K_LCTRL]:
+            interaction_list.append(self.fire_player)
+        if pressed_key[pygame.K_RCTRL]:
+            interaction_list.append(self.water_player)
+        for player in interaction_list:
+            elem_sprite: Union[pygame.sprite.Sprite, ElementSprite]
+            elem_sprite = pygame.sprite.spritecollideany(player, self.elements_group)
+            if elem_sprite is not None:
+                elem_sprite.interact_with(player)
+                interaction = True
+        if interaction:
+            self.do_interaction_checks()
+
+    def do_interaction_checks(self):
+        if not self.fire_exit.is_active:
+            if not len(self.ruby_group):
+                self.fire_exit.set_active(True)
+        if not self.water_exit.is_active:
+            if not len(self.aquamarine_group):
+                self.water_exit.set_active(True)
 
     def update(self):
         """Обновление спрайтов"""
@@ -569,9 +630,18 @@ class Game:
 
         for player in [self.fire_player, self.water_player]:
             if not player.alive:
-                print("Game over")
+                print("Вы проиграли!")
                 self.game_over = True
                 self.running = False
+
+        if self.water_exit.is_interacted and self.water_exit.is_interacted:
+            print("Вы выиграли!")
+            self.game_over = True
+            self.running = False
+
+        for elem_sprite in self.elements_group:
+            elem_sprite: Union[pygame.sprite.Sprite, ElementSprite]
+            elem_sprite.reset_interaction()
 
     def display(self):
         """Отрисовка элементов игры"""
