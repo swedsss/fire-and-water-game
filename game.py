@@ -26,6 +26,7 @@ SPRITE_FILE_RIVER = "river.png"
 SPRITE_FILE_ACID = "acid.png"
 SPRITE_FILE_FIRE_PLAYER = "fire_player.png"
 SPRITE_FILE_WATER_PLAYER = "water_player.png"
+SPRITE_FILE_ELEMENTS = "elements.png"
 
 LEVEL_BLOCK_EMPTY = " "
 LEVEL_BLOCK_FLOOR = "."
@@ -75,6 +76,9 @@ class SpriteSheet:
         image.set_colorkey(BLACK)
         return pygame.transform.scale(image, (width, height))
 
+    def get_cell_image(self, col, row, width=SPRITE_SIZE, height=SPRITE_SIZE):
+        return self.get_image(col * width, row * height, width, height)
+
 
 class EdgeSpriteSheet(SpriteSheet):
     """Класс для набора спрайтов, которые расположены с учётом соседних спрайтов"""
@@ -89,7 +93,7 @@ class EdgeSpriteSheet(SpriteSheet):
         if index < 0 or index >= 16:
             raise ValueError("Индекс должен быть в пределах от 0 до 15 включительно!")
         col, row = self.TILE_COORDS_DICT[index]
-        return self.get_image(SPRITE_SIZE * col, SPRITE_SIZE * row, SPRITE_SIZE, SPRITE_SIZE)
+        return self.get_cell_image(col, row)
 
 
 class Sprite(pygame.sprite.Sprite):
@@ -122,6 +126,8 @@ class BlockSprite(Sprite):
         self.rect = self.image.get_rect()
         self.set_cell_pos(col, row)
 
+        self.sprite_sheet = None
+
     def define_sprite_sheet(self):
         pass
 
@@ -151,7 +157,7 @@ class River(BlockSprite):
 
 
 class Acid(BlockSprite):
-    """Класс для спрайта реки"""
+    """Класс для спрайта кислоты"""
     def define_sprite_sheet(self):
         self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_ACID))
 
@@ -189,8 +195,7 @@ class Player(Sprite):
         for row, sprite_list in enumerate([self.down_sprites, self.left_sprites,
                                            self.right_sprites, self.up_sprites]):
             for col in range(4):
-                image = self.sprite_sheet.get_image(col * SPRITE_SIZE, row * SPRITE_SIZE,
-                                                    SPRITE_SIZE, SPRITE_SIZE)
+                image = self.sprite_sheet.get_cell_image(col, row)
                 sprite_list.append(image)
 
     def add_death_group(self, group):
@@ -288,6 +293,47 @@ class WaterPlayer(Player):
     """Класс для игрока 'Вода'"""
     def define_sprite_sheet(self):
         self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_WATER_PLAYER))
+
+
+class ElementSprite(Sprite):
+    """Общий класс для элементов, с которыми могут взаимодействовать игроки"""
+    def __init__(self, col, row):
+        super().__init__()
+        self.is_active = False
+
+        self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_ELEMENTS))
+        self.images = []
+        self.load_images()
+
+        self.image: Optional[pygame.Surface] = None
+        self.set_active(False)
+        self.set_cell_pos(col, row)
+
+    def load_images(self):
+        """Загрузка 2х спрайтов, для элемента в неактивном и активном состоянии"""
+        image = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE)).convert()
+        self.images = [image for _ in range(2)]
+
+    def set_active(self, active):
+        self.is_active = active
+        self.image = self.images[1] if self.is_active else self.images[0]
+        self.rect = self.image.get_rect()
+
+
+class Ruby(ElementSprite):
+    """Класс для камня 'Рубин'"""
+    def load_images(self):
+        inactive_image = self.sprite_sheet.get_cell_image(0, 0)
+        active_image = self.sprite_sheet.get_cell_image(0, 0)
+        self.images = [inactive_image, active_image]
+
+
+class Aquamarine(ElementSprite):
+    """Класс для камня 'Аквамарин'"""
+    def load_images(self):
+        inactive_image = self.sprite_sheet.get_cell_image(1, 0)
+        active_image = self.sprite_sheet.get_cell_image(1, 0)
+        self.images = [inactive_image, active_image]
 
 
 class Level:
