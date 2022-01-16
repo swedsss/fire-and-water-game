@@ -55,27 +55,14 @@ SCREEN_COLORS = [pygame.Color(47, 72, 78), pygame.Color(54, 54, 54),
                  pygame.Color(27, 38, 50), pygame.Color(56, 105, 117)]
 
 
-def load_image(name, colorkey=None):
-    """
-    Загрузка изображения спрайта
-    :param name: имя файла
-    :param colorkey: фоновый цвет
-    :return: спрайт
-    """
-    fullname = os.path.join(name)
-    if not os.path.isfile(fullname):
-        print(f"Файл с изображением '{fullname}' не найден")
-        sys.exit()
-    image = pygame.image.load(fullname)
-    if colorkey is not None:
-        image = image.convert()
-        if colorkey == -1:
-            colorkey = image.get_at((0, 0))
-        image.set_colorkey(colorkey)
-    else:
-        image = image.convert_alpha()
-    width, height = image.get_rect().size
-    return pygame.transform.scale(image, (width, height))
+def display_text(surface, text, size, color, x, y):
+    """Отображение текста"""
+    font = pygame.font.SysFont("serif", size)
+    text_surface = font.render(text, True, color)
+    text_rect = text_surface.get_rect()
+    text_rect.center = (x, y)
+    surface.blit(text_surface, text_rect)
+    return text_surface
 
 
 class SpriteSheet:
@@ -405,6 +392,7 @@ class Aquamarine(ElementSprite):
 
 class FireExit(ElementSprite):
     """Класс для завершения уровня для игрока 'Огонь'"""
+
     def load_images(self):
         inactive_image = self.sprite_sheet.get_cell_image(0, 1)
         active_image = self.sprite_sheet.get_cell_image(1, 1)
@@ -417,6 +405,7 @@ class FireExit(ElementSprite):
 
 class WaterExit(ElementSprite):
     """Класс для завершения уровня для игрока 'Огонь'"""
+
     def load_images(self):
         inactive_image = self.sprite_sheet.get_cell_image(2, 1)
         active_image = self.sprite_sheet.get_cell_image(3, 1)
@@ -427,8 +416,39 @@ class WaterExit(ElementSprite):
             self.is_interacted = True
 
 
+class LevelSprite(Sprite):
+    """Класс для спрайтов уровней при выборе уровня"""
+
+    def __init__(self, col, row, number, is_unlocked, is_done):
+        super().__init__()
+        self.number = number
+
+        self.is_unlocked = is_unlocked
+        self.is_done = is_done
+
+        self.define_image()
+        self.sprite_sheet = None
+
+        self.set_cell_pos(col, row)
+
+    def define_image(self):
+        if not self.is_unlocked:
+            color = 'red'
+        elif not self.is_done:
+            color = 'blue'
+        else:
+            color = 'green'
+        pygame.draw.circle(self.image, color, (SPRITE_SIZE // 2, SPRITE_SIZE // 2),
+                           SPRITE_SIZE // 2, 1)
+        display_text(self.image, str(self.number), 24, WHITE, SPRITE_SIZE // 2, SPRITE_SIZE // 2)
+
+    def get_levelname(self):
+        return f"level{self.number}.txt"
+
+
 class Level:
     """Уровень игры"""
+
     def __init__(self, filename):
         self.filename = filename
         self.width, self.height = 0, 0
@@ -494,13 +514,25 @@ class Level:
 
 class Screen:
     """Общий класс для экранов"""
+
     def __init__(self):
+        self.screen_sprites = pygame.sprite.Group()
+
         self.bg_color1 = SCREEN_COLORS[0]
         self.bg_color2 = SCREEN_COLORS[1]
         self.shadow_color = SCREEN_COLORS[2]
         self.text_color = SCREEN_COLORS[3]
-        self.text_rect = pygame.Rect(25, 100, 750, 675)
-        self.shadow_rect = pygame.Rect(25, 100, 750, 16)
+
+        self.shadow_cell_rect = pygame.Rect(2, 3, 21, 1)
+        self.text_cell_rect = pygame.Rect(2, 4, 21, 20)
+        self.shadow_rect = pygame.Rect(SPRITE_SIZE * self.shadow_cell_rect.left,
+                                       SPRITE_SIZE * self.shadow_cell_rect.top,
+                                       SPRITE_SIZE * self.shadow_cell_rect.width,
+                                       SPRITE_SIZE * self.shadow_cell_rect.height)
+        self.text_rect = pygame.Rect(SPRITE_SIZE * self.text_cell_rect.left,
+                                     SPRITE_SIZE * self.text_cell_rect.top,
+                                     SPRITE_SIZE * self.text_cell_rect.width,
+                                     SPRITE_SIZE * self.text_cell_rect.height)
 
     def prepare(self, surface):
         surface.fill(self.bg_color1)
@@ -511,23 +543,14 @@ class Screen:
         rect = image.get_rect()
         surface.blit(image, rect)
 
-    @staticmethod
-    def display_text(surface, text, size, color, x, y):
-        """Отображение текста"""
-        font = pygame.font.SysFont("serif", size)
-        text_surface = font.render(text, True, color)
-        text_rect = text_surface.get_rect()
-        text_rect.midtop = (x, y)
-        surface.blit(text_surface, text_rect)
-        return text_surface
-
     def render(self, surface):
         pass
 
     def process_events(self):
         self.pause()
 
-    def pause(self):
+    @staticmethod
+    def pause():
         waiting = True
         while waiting:
             for event in pygame.event.get():
@@ -544,17 +567,56 @@ class Screen:
 
 class StartScreen(Screen):
     """Стартовый экран для выбора уровня"""
+
     def __init__(self):
         super().__init__()
-        self.levelname = ''
+        self.level_sprites = pygame.sprite.Group()
+
+        self.levels_done = 9
+        self.levels = []
+        self.create_levels()
+
+        self.levelname = None
+
+    def create_levels(self):
+        for row in range(3):
+            for col in range(3):
+                num = row * 3 + col + 1
+                is_unlocked, is_done = False, False
+                if num <= self.levels_done:
+                    is_unlocked, is_done = True, True
+                elif num == self.levels_done + 1:
+                    is_unlocked = True
+
+                level = LevelSprite(self.shadow_cell_rect.left + col * 7 + 3,
+                                    self.shadow_cell_rect.top + row * 7 + 3,
+                                    num, is_unlocked, is_done)
+
+                self.screen_sprites.add(level)
+                self.level_sprites.add(level)
+
+    def process_events(self):
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    sys.exit()
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == pygame.BUTTON_LEFT:
+                    for level in self.level_sprites:
+                        level: LevelSprite
+                        if level.is_unlocked and level.rect.collidepoint(*event.pos):
+                            self.levelname = level.get_levelname()
+                            waiting = False
 
     def render(self, surface):
         self.prepare(surface)
+        self.screen_sprites.draw(surface)
         pygame.display.flip()
 
 
 class EndScreen(Screen):
     """Конечный экран для отображения результатов"""
+
     def __init__(self):
         super().__init__()
         self.win_game = False
@@ -571,18 +633,21 @@ class EndScreen(Screen):
         for i, word in enumerate(result_text.split()):
             y = self.text_rect.top + self.text_rect.height // 3 + self.text_rect.height // 6 * i
             for y_offset, color in [(4, self.shadow_color), (0, self.text_color)]:
-                self.display_text(surface, word, 80, color,
-                                  SCREEN_WIDTH // 2, y + y_offset)
+                display_text(surface, word, 80, color,
+                             SCREEN_WIDTH // 2, y + y_offset)
         pygame.display.flip()
 
 
 class Game:
     """Основной класс игры"""
+
     def __init__(self):
         pygame.init()
         pygame.display.set_caption(TITLE)
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.clock = pygame.time.Clock()
+
+        self.levelname = None
 
         self.start_screen = StartScreen()
         self.end_screen = EndScreen()
@@ -767,6 +832,7 @@ class Game:
 
     def show_start_screen(self):
         self.start_screen.show(self.screen)
+        self.levelname = self.start_screen.levelname
 
     def show_end_screen(self):
         self.end_screen.set_result(self.win_game)
@@ -778,8 +844,7 @@ def main():
 
     while mygame.running:
         mygame.show_start_screen()
-        level = 'level1.txt'
-        mygame.new_game(level)
+        mygame.new_game(mygame.levelname)
         mygame.run()
         mygame.show_end_screen()
 
