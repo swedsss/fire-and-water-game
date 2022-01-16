@@ -6,7 +6,7 @@ from typing import Optional, Union
 SPRITE_SIZE = 32
 MAX_LEVEL_SIZE = 25
 
-TITLE = 'Огонь и вода'
+TITLE = 'ОГОНЬ и ВОДА'
 SCREEN_WIDTH = MAX_LEVEL_SIZE * SPRITE_SIZE
 SCREEN_HEIGHT = MAX_LEVEL_SIZE * SPRITE_SIZE
 
@@ -15,9 +15,12 @@ FPS = 60
 BLACK = pygame.Color('black')
 WHITE = pygame.Color('white')
 
+DIR_NAME_LEVELS = 'levels'
+DIR_NAME_IMAGES = 'img'
+
 CURRENT_DIR = os.path.dirname(__file__)
-LEVELS_DIR = os.path.join(CURRENT_DIR, 'levels')
-IMG_DIR = os.path.join(CURRENT_DIR, 'img')
+LEVELS_DIR = os.path.join(CURRENT_DIR, DIR_NAME_LEVELS)
+IMG_DIR = os.path.join(CURRENT_DIR, DIR_NAME_IMAGES)
 
 SPRITE_FILE_WALLS = "walls.png"
 SPRITE_FILE_FLOOR = "floor.png"
@@ -27,6 +30,8 @@ SPRITE_FILE_ACID = "acid.png"
 SPRITE_FILE_FIRE_PLAYER = "fire_player.png"
 SPRITE_FILE_WATER_PLAYER = "water_player.png"
 SPRITE_FILE_ELEMENTS = "elements.png"
+
+IMG_FILE_TITLE = "title.png"
 
 LEVEL_BLOCK_EMPTY = " "
 LEVEL_BLOCK_FLOOR = "."
@@ -45,6 +50,9 @@ LEVEL_ELEM_WATER_EXIT = "W"
 
 PLAYER_STEP = SPRITE_SIZE // 8
 PlAYER_ANIMATION_DURATION = 100
+
+SCREEN_COLORS = [pygame.Color(47, 72, 78), pygame.Color(54, 54, 54),
+                 pygame.Color(27, 38, 50), pygame.Color(56, 105, 117)]
 
 
 def load_image(name, colorkey=None):
@@ -421,7 +429,6 @@ class WaterExit(ElementSprite):
 
 class Level:
     """Уровень игры"""
-
     def __init__(self, filename):
         self.filename = filename
         self.width, self.height = 0, 0
@@ -485,17 +492,104 @@ class Level:
         return 0 <= col < self.width and 0 <= row < self.height
 
 
+class Screen:
+    """Общий класс для экранов"""
+    def __init__(self):
+        self.bg_color1 = SCREEN_COLORS[0]
+        self.bg_color2 = SCREEN_COLORS[1]
+        self.shadow_color = SCREEN_COLORS[2]
+        self.text_color = SCREEN_COLORS[3]
+        self.text_rect = pygame.Rect(25, 100, 750, 675)
+        self.shadow_rect = pygame.Rect(25, 100, 750, 16)
+
+    def prepare(self, surface):
+        surface.fill(self.bg_color1)
+        pygame.draw.rect(surface, self.bg_color2, self.text_rect)
+        pygame.draw.rect(surface, self.shadow_color, self.shadow_rect)
+        image = pygame.image.load(os.path.join(IMG_DIR, IMG_FILE_TITLE)).convert()
+        image.set_colorkey(BLACK)
+        rect = image.get_rect()
+        surface.blit(image, rect)
+
+    @staticmethod
+    def display_text(surface, text, size, color, x, y):
+        """Отображение текста"""
+        font = pygame.font.SysFont("serif", size)
+        text_surface = font.render(text, True, color)
+        text_rect = text_surface.get_rect()
+        text_rect.midtop = (x, y)
+        surface.blit(text_surface, text_rect)
+        return text_surface
+
+    def render(self, surface):
+        pass
+
+    def process_events(self):
+        self.pause()
+
+    def pause(self):
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key in [pygame.K_ESCAPE, pygame.K_SPACE, pygame.K_RETURN]:
+                        waiting = False
+
+    def show(self, surface):
+        self.render(surface)
+        self.process_events()
+
+
+class StartScreen(Screen):
+    """Стартовый экран для выбора уровня"""
+    def __init__(self):
+        super().__init__()
+        self.levelname = ''
+
+    def render(self, surface):
+        self.prepare(surface)
+        pygame.display.flip()
+
+
+class EndScreen(Screen):
+    """Конечный экран для отображения результатов"""
+    def __init__(self):
+        super().__init__()
+        self.win_game = False
+
+    def set_result(self, result):
+        self.win_game = result
+
+    def render(self, surface):
+        self.prepare(surface)
+        if self.win_game:
+            result_text = 'УРОВЕНЬ ПРОЙДЕН!'
+        else:
+            result_text = 'ВЫ ПРОИГРАЛИ!'
+        for i, word in enumerate(result_text.split()):
+            y = self.text_rect.top + self.text_rect.height // 3 + self.text_rect.height // 6 * i
+            for y_offset, color in [(4, self.shadow_color), (0, self.text_color)]:
+                self.display_text(surface, word, 80, color,
+                                  SCREEN_WIDTH // 2, y + y_offset)
+        pygame.display.flip()
+
+
 class Game:
     """Основной класс игры"""
-
     def __init__(self):
         pygame.init()
         pygame.display.set_caption(TITLE)
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.clock = pygame.time.Clock()
 
+        self.start_screen = StartScreen()
+        self.end_screen = EndScreen()
+
         self.running = True
         self.game_over = False
+        self.win_game = False
 
         self.all_sprites = pygame.sprite.Group()
         self.wall_sprites = pygame.sprite.Group()
@@ -512,49 +606,58 @@ class Game:
         self.fire_exit = None
         self.water_exit = None
 
-        self.level = None
+    def reset_game(self):
+        for group in [self.all_sprites, self.wall_sprites,
+                      self.lava_sprites, self.river_sprites, self.acid_sprites,
+                      self.elements_group, self.ruby_group, self.aquamarine_group]:
+            group.empty()
 
-    def new_game(self):
+        self.fire_player = None
+        self.water_player = None
+        self.fire_exit = None
+        self.water_exit = None
+
+    def new_game(self, levelname):
         """Создание новой игры"""
-        self.all_sprites.empty()
+        self.reset_game()
 
-        self.level = Level('level1.txt')
-        for row in range(self.level.height):
-            for col in range(self.level.width):
-                if self.level.blocks[row][col] == LEVEL_BLOCK_WALL:
-                    level_sprite = Wall(col, row, self.level.indexes[row][col])
+        level = Level(levelname)
+        for row in range(level.height):
+            for col in range(level.width):
+                if level.blocks[row][col] == LEVEL_BLOCK_WALL:
+                    level_sprite = Wall(col, row, level.indexes[row][col])
                     self.wall_sprites.add(level_sprite)
-                elif self.level.blocks[row][col] == LEVEL_BLOCK_LAVA:
-                    level_sprite = Lava(col, row, self.level.indexes[row][col])
+                elif level.blocks[row][col] == LEVEL_BLOCK_LAVA:
+                    level_sprite = Lava(col, row, level.indexes[row][col])
                     self.lava_sprites.add(level_sprite)
-                elif self.level.blocks[row][col] == LEVEL_BLOCK_RIVER:
-                    level_sprite = River(col, row, self.level.indexes[row][col])
+                elif level.blocks[row][col] == LEVEL_BLOCK_RIVER:
+                    level_sprite = River(col, row, level.indexes[row][col])
                     self.river_sprites.add(level_sprite)
-                elif self.level.blocks[row][col] == LEVEL_BLOCK_ACID:
-                    level_sprite = Acid(col, row, self.level.indexes[row][col])
+                elif level.blocks[row][col] == LEVEL_BLOCK_ACID:
+                    level_sprite = Acid(col, row, level.indexes[row][col])
                     self.acid_sprites.add(level_sprite)
-                elif self.level.blocks[row][col] == LEVEL_BLOCK_EMPTY:
+                elif level.blocks[row][col] == LEVEL_BLOCK_EMPTY:
                     continue
                 else:
-                    level_sprite = Floor(col, row, self.level.indexes[row][col])
+                    level_sprite = Floor(col, row, level.indexes[row][col])
 
                 self.all_sprites.add(level_sprite)
 
-        if self.level.fire_player_pos is not None:
-            self.fire_player = FirePlayer(*self.level.fire_player_pos)
+        if level.fire_player_pos is not None:
+            self.fire_player = FirePlayer(*level.fire_player_pos)
             self.all_sprites.add(self.fire_player)
             for group in [self.river_sprites, self.acid_sprites]:
                 self.fire_player.add_death_group(group)
             ElementSprite.fire_player = self.fire_player
-        if self.level.water_player_pos is not None:
-            self.water_player = WaterPlayer(*self.level.water_player_pos)
+        if level.water_player_pos is not None:
+            self.water_player = WaterPlayer(*level.water_player_pos)
             self.all_sprites.add(self.water_player)
             for group in [self.lava_sprites, self.acid_sprites]:
                 self.water_player.add_death_group(group)
             ElementSprite.water_player = self.water_player
 
-        for elem in self.level.elem_pos_dict:
-            for col, row in self.level.elem_pos_dict[elem]:
+        for elem in level.elem_pos_dict:
+            for col, row in level.elem_pos_dict[elem]:
                 if elem == LEVEL_ELEM_RUBY:
                     level_sprite = Ruby(col, row)
                     self.ruby_group.add(level_sprite)
@@ -572,14 +675,16 @@ class Game:
                 self.elements_group.add(level_sprite)
                 self.all_sprites.add(level_sprite)
 
+        self.win_game = False
+        self.game_over = False
+
         self.do_interaction_checks()
 
     def process_events(self):
         """Обработка событий игры"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                self.game_over = True
-                self.running = False
+                sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_a:
                     self.fire_player.move_to_cell(-1, 0, self.wall_sprites)
@@ -630,14 +735,14 @@ class Game:
 
         for player in [self.fire_player, self.water_player]:
             if not player.alive:
-                print("Вы проиграли!")
+                self.win_game = False
                 self.game_over = True
-                self.running = False
+                return
 
         if self.water_exit.is_interacted and self.water_exit.is_interacted:
-            print("Вы выиграли!")
+            self.win_game = True
             self.game_over = True
-            self.running = False
+            return
 
         for elem_sprite in self.elements_group:
             elem_sprite: Union[pygame.sprite.Sprite, ElementSprite]
@@ -660,13 +765,23 @@ class Game:
 
             self.clock.tick(FPS)
 
+    def show_start_screen(self):
+        self.start_screen.show(self.screen)
+
+    def show_end_screen(self):
+        self.end_screen.set_result(self.win_game)
+        self.end_screen.show(self.screen)
+
 
 def main():
     mygame = Game()
 
     while mygame.running:
-        mygame.new_game()
+        mygame.show_start_screen()
+        level = 'level1.txt'
+        mygame.new_game(level)
         mygame.run()
+        mygame.show_end_screen()
 
     pygame.quit()
 
