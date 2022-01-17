@@ -113,6 +113,19 @@ class EdgeSpriteSheet(SpriteSheet):
 class Sprite(pygame.sprite.Sprite):
     """Общий класс для всех спрайтов на экране"""
 
+    col_offset = 0
+    row_offset = 0
+
+    @classmethod
+    def reset_offset(cls):
+        cls.col_offset = 0
+        cls.row_offset = 0
+
+    @classmethod
+    def set_offset(cls, col_offset, row_offset):
+        cls.col_offset = col_offset
+        cls.row_offset = row_offset
+
     @staticmethod
     def get_empty_image(width=SPRITE_SIZE, height=SPRITE_SIZE):
         image = pygame.Surface((width, height)).convert()
@@ -132,7 +145,10 @@ class Sprite(pygame.sprite.Sprite):
         self.rect.centery = y
 
     def set_cell_pos(self, col, row):
-        self.set_pos(col * SPRITE_SIZE + SPRITE_SIZE // 2, row * SPRITE_SIZE + SPRITE_SIZE // 2)
+        new_col = col + self.col_offset
+        new_row = row + self.row_offset
+        self.set_pos(new_col * SPRITE_SIZE + SPRITE_SIZE // 2,
+                     new_row * SPRITE_SIZE + SPRITE_SIZE // 2)
 
 
 class BlockSprite(Sprite):
@@ -471,6 +487,7 @@ class Level:
     def __init__(self, filename):
         self.filename = filename
         self.width, self.height = 0, 0
+        self.col_offset, self.row_offset = 0, 0
         self.blocks = []
         self.indexes = []
         self.fire_player_pos = None
@@ -487,6 +504,9 @@ class Level:
 
         self.width = max(map(len, data))
         self.height = len(data)
+        self.col_offset = (MAX_LEVEL_SIZE - self.width) // 2
+        self.row_offset = (MAX_LEVEL_SIZE - self.height) // 2
+
         data = list(map(lambda x: x.ljust(self.width, LEVEL_BLOCK_EMPTY), data))
 
         blocks_set = {LEVEL_BLOCK_EMPTY, LEVEL_BLOCK_WALL, LEVEL_BLOCK_FLOOR,
@@ -533,6 +553,7 @@ class Level:
 
 class SaveFile:
     """Класс для файла с сохранением прогресса"""
+
     def __init__(self):
         self.filename = os.path.join(CURRENT_DIR, CSV_FILE_SAVE)
         self.headers = ["levels_done"]
@@ -625,6 +646,7 @@ class StartScreen(Screen):
         self.level_sprite: Optional[LevelSprite] = None
 
     def reset_screen(self):
+        Sprite.reset_offset()
         self.screen_sprites.empty()
         self.level_sprites.empty()
         self.create_levels()
@@ -737,6 +759,7 @@ class Game:
         self.water_exit = None
 
     def reset_game(self):
+        Sprite.reset_offset()
         for group in [self.all_sprites, self.wall_sprites,
                       self.lava_sprites, self.river_sprites, self.acid_sprites,
                       self.elements_group, self.ruby_group, self.aquamarine_group]:
@@ -752,6 +775,8 @@ class Game:
         self.reset_game()
 
         level = Level(levelname)
+        Sprite.set_offset(level.col_offset, level.row_offset)
+
         for row in range(level.height):
             for col in range(level.width):
                 if level.blocks[row][col] == LEVEL_BLOCK_WALL:
