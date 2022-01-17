@@ -2,7 +2,7 @@ import sys
 import os
 import pygame
 import csv
-from typing import Optional, Union, Type
+from typing import Optional, Union
 
 SPRITE_SIZE = 32
 MAX_LEVEL_SIZE = 25
@@ -33,6 +33,7 @@ SPRITE_FILE_ACID = "acid.png"
 SPRITE_FILE_FIRE_PLAYER = "fire_player.png"
 SPRITE_FILE_WATER_PLAYER = "water_player.png"
 SPRITE_FILE_ELEMENTS = "elements.png"
+SPRITE_FILE_LEVEL_ICONS = "level_icons.png"
 
 IMG_FILE_TITLE = "title.png"
 
@@ -54,13 +55,22 @@ LEVEL_ELEM_WATER_EXIT = "W"
 PLAYER_STEP = SPRITE_SIZE // 8
 PlAYER_ANIMATION_DURATION = 100
 
-SCREEN_COLORS = [pygame.Color(47, 72, 78), pygame.Color(54, 54, 54),
-                 pygame.Color(27, 38, 50), pygame.Color(56, 105, 117)]
+SCREEN_BG_COLOR1 = "bg_color1"
+SCREEN_BG_COLOR2 = "bg_color2"
+SCREEN_SHADOW_COLOR = "shadow_color"
+SCREEN_TEXT_COLOR = "text_color"
+
+SCREEN_COLORS_DICT = {
+    SCREEN_BG_COLOR1: pygame.Color(47, 72, 78),
+    SCREEN_BG_COLOR2: pygame.Color(54, 54, 54),
+    SCREEN_SHADOW_COLOR: pygame.Color(27, 38, 50),
+    SCREEN_TEXT_COLOR: pygame.Color(56, 105, 117)
+}
 
 
 def display_text(surface, text, size, color, x, y):
     """Отображение текста"""
-    font = pygame.font.SysFont("serif", size)
+    font = pygame.font.SysFont("sans-serif", size)
     text_surface = font.render(text, True, color)
     text_rect = text_surface.get_rect()
     text_rect.center = (x, y)
@@ -429,21 +439,27 @@ class LevelSprite(Sprite):
         self.is_unlocked = is_unlocked
         self.is_done = is_done
 
+        self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, 'level_icons.png'))
         self.define_image()
         self.sprite_sheet = None
 
         self.set_cell_pos(col, row)
 
     def define_image(self):
+        self.image = self.get_empty_image(SPRITE_SIZE, SPRITE_SIZE * 2)
         if not self.is_unlocked:
-            color = 'red'
+            image = self.sprite_sheet.get_cell_image(0, 0)
+            color = None
         elif not self.is_done:
-            color = 'blue'
+            image = self.sprite_sheet.get_cell_image(1, 0)
+            color = pygame.Color('white')
         else:
-            color = 'green'
-        pygame.draw.circle(self.image, color, (SPRITE_SIZE // 2, SPRITE_SIZE // 2),
-                           SPRITE_SIZE // 2, 1)
-        display_text(self.image, str(self.number), 24, WHITE, SPRITE_SIZE // 2, SPRITE_SIZE // 2)
+            image = self.sprite_sheet.get_cell_image(2, 0)
+            color = pygame.Color('green')
+        self.image.blit(image, (0, 0))
+        if color is not None:
+            display_text(self.image, str(self.number), 24, color,
+                         SPRITE_SIZE // 2, SPRITE_SIZE + SPRITE_SIZE // 2)
 
     def get_levelname(self):
         return f"level{self.number}.txt"
@@ -550,10 +566,10 @@ class Screen:
     def __init__(self):
         self.screen_sprites = pygame.sprite.Group()
 
-        self.bg_color1 = SCREEN_COLORS[0]
-        self.bg_color2 = SCREEN_COLORS[1]
-        self.shadow_color = SCREEN_COLORS[2]
-        self.text_color = SCREEN_COLORS[3]
+        self.bg_color1 = SCREEN_COLORS_DICT[SCREEN_BG_COLOR1]
+        self.bg_color2 = SCREEN_COLORS_DICT[SCREEN_BG_COLOR2]
+        self.shadow_color = SCREEN_COLORS_DICT[SCREEN_SHADOW_COLOR]
+        self.text_color = SCREEN_COLORS_DICT[SCREEN_TEXT_COLOR]
 
         self.shadow_cell_rect = pygame.Rect(2, 3, 21, 1)
         self.text_cell_rect = pygame.Rect(2, 4, 21, 20)
@@ -625,7 +641,7 @@ class StartScreen(Screen):
                     is_unlocked = True
 
                 level = LevelSprite(self.shadow_cell_rect.left + col * 7 + 3,
-                                    self.shadow_cell_rect.top + row * 7 + 3,
+                                    self.shadow_cell_rect.top + row * 7 + 4,
                                     num, is_unlocked, is_done)
 
                 self.screen_sprites.add(level)
@@ -651,6 +667,9 @@ class StartScreen(Screen):
 
     def render(self, surface):
         self.prepare(surface)
+        for y_offset, color in [(4, self.shadow_color), (0, self.text_color)]:
+            display_text(surface, 'ВЫБЕРИТЕ УРОВЕНЬ:', 50, color,
+                         SCREEN_WIDTH // 2, SCREEN_WIDTH // 5 + y_offset)
         self.screen_sprites.draw(surface)
         pygame.display.flip()
 
