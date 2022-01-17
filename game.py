@@ -1,7 +1,8 @@
 import sys
 import os
 import pygame
-from typing import Optional, Union
+import csv
+from typing import Optional, Union, Type
 
 SPRITE_SIZE = 32
 MAX_LEVEL_SIZE = 25
@@ -21,6 +22,8 @@ DIR_NAME_IMAGES = 'img'
 CURRENT_DIR = os.path.dirname(__file__)
 LEVELS_DIR = os.path.join(CURRENT_DIR, DIR_NAME_LEVELS)
 IMG_DIR = os.path.join(CURRENT_DIR, DIR_NAME_IMAGES)
+
+CSV_FILE_SAVE = "save.csv"
 
 SPRITE_FILE_WALLS = "walls.png"
 SPRITE_FILE_FLOOR = "floor.png"
@@ -512,6 +515,35 @@ class Level:
         return 0 <= col < self.width and 0 <= row < self.height
 
 
+class SaveFile:
+    """Класс для файла с сохранением прогресса"""
+    def __init__(self):
+        self.filename = os.path.join(CURRENT_DIR, CSV_FILE_SAVE)
+        self.headers = ["levels_done"]
+
+        self.levels_done = 0
+
+        self.load_values()
+
+    def load_values(self):
+        try:
+            with open(self.filename, 'r', encoding="utf-8") as csvfile:
+                reader = csv.DictReader(csvfile, delimiter=';')
+                for line in reader:
+                    if "levels_done" in line:
+                        self.levels_done = int(line["levels_done"])
+        except FileNotFoundError:
+            return
+
+    def save_values(self):
+        data = [self.headers, [self.levels_done]]
+
+        with open(self.filename, 'w', encoding="utf-8", newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            for row in data:
+                writer.writerow(row)
+
+
 class Screen:
     """Общий класс для экранов"""
 
@@ -571,21 +603,25 @@ class StartScreen(Screen):
     def __init__(self):
         super().__init__()
         self.level_sprites = pygame.sprite.Group()
-
-        self.levels_done = 9
-        self.levels = []
+        self.save_file = SaveFile()
         self.create_levels()
 
-        self.levelname = None
+        self.level_sprite: Optional[LevelSprite] = None
+
+    def reset_screen(self):
+        self.screen_sprites.empty()
+        self.level_sprites.empty()
+        self.create_levels()
+        self.level_sprite = None
 
     def create_levels(self):
         for row in range(3):
             for col in range(3):
                 num = row * 3 + col + 1
                 is_unlocked, is_done = False, False
-                if num <= self.levels_done:
+                if num <= self.save_file.levels_done:
                     is_unlocked, is_done = True, True
-                elif num == self.levels_done + 1:
+                elif num == self.save_file.levels_done + 1:
                     is_unlocked = True
 
                 level = LevelSprite(self.shadow_cell_rect.left + col * 7 + 3,
@@ -594,6 +630,11 @@ class StartScreen(Screen):
 
                 self.screen_sprites.add(level)
                 self.level_sprites.add(level)
+
+    def show(self, surface):
+        self.reset_screen()
+        self.render(surface)
+        self.process_events()
 
     def process_events(self):
         waiting = True
@@ -605,13 +646,18 @@ class StartScreen(Screen):
                     for level in self.level_sprites:
                         level: LevelSprite
                         if level.is_unlocked and level.rect.collidepoint(*event.pos):
-                            self.levelname = level.get_levelname()
+                            self.level_sprite = level
                             waiting = False
 
     def render(self, surface):
         self.prepare(surface)
         self.screen_sprites.draw(surface)
         pygame.display.flip()
+
+    def unlock_new_level(self):
+        if self.level_sprite.number > self.save_file.levels_done:
+            self.save_file.levels_done += 1
+            self.save_file.save_values()
 
 
 class EndScreen(Screen):
@@ -806,6 +852,7 @@ class Game:
 
         if self.water_exit.is_interacted and self.water_exit.is_interacted:
             self.win_game = True
+            self.start_screen.unlock_new_level()
             self.game_over = True
             return
 
@@ -832,7 +879,7 @@ class Game:
 
     def show_start_screen(self):
         self.start_screen.show(self.screen)
-        self.levelname = self.start_screen.levelname
+        self.levelname = self.start_screen.level_sprite.get_levelname()
 
     def show_end_screen(self):
         self.end_screen.set_result(self.win_game)
