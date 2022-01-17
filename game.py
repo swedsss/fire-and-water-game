@@ -51,6 +51,10 @@ LEVEL_ELEM_RUBY = "<"
 LEVEL_ELEM_AQUAMARINE = ">"
 LEVEL_ELEM_FIRE_EXIT = "F"
 LEVEL_ELEM_WATER_EXIT = "W"
+LEVEL_ELEM_DOORBUTTON_1 = "b"
+LEVEL_ELEM_DOORBUTTON_2 = "B"
+LEVEL_ELEM_DOOR_1 = "d"
+LEVEL_ELEM_DOOR_2 = "D"
 
 PLAYER_STEP = SPRITE_SIZE // 8
 PlAYER_ANIMATION_DURATION = 100
@@ -110,7 +114,7 @@ class EdgeSpriteSheet(SpriteSheet):
         return self.get_cell_image(col, row)
 
 
-class Sprite(pygame.sprite.Sprite):
+class BaseSprite(pygame.sprite.Sprite):
     """Общий класс для всех спрайтов на экране"""
 
     col_offset = 0
@@ -151,7 +155,7 @@ class Sprite(pygame.sprite.Sprite):
                      new_row * SPRITE_SIZE + SPRITE_SIZE // 2)
 
 
-class BlockSprite(Sprite):
+class BlockSprite(BaseSprite):
     """Общий класс для спрайтов, отображающих блоки уровня.
        Спрайты этих блоков зависят от соседних ячеек того же класса."""
 
@@ -205,7 +209,7 @@ class Acid(BlockSprite):
         self.sprite_sheet = EdgeSpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_ACID))
 
 
-class Player(Sprite):
+class Player(BaseSprite):
     """Общий класс для игроков"""
 
     def __init__(self, col, row):
@@ -245,14 +249,22 @@ class Player(Sprite):
     def add_death_group(self, group):
         self.death_groups.append(group)
 
-    def move_to_cell(self, col, row, stop_group):
+    def move_to_cell(self, col, row, stop_group, door_group):
         """Перемещение в соседнню клетку"""
         if self.walk_to_pos is not None:
             return
         pos_before_move = self.get_pos()
         self.rect = self.rect.move(col * SPRITE_SIZE, row * SPRITE_SIZE)
         pos_after_move = self.get_pos()
-        can_walk = not pygame.sprite.spritecollideany(self, stop_group)
+
+        can_walk = True
+        if pygame.sprite.spritecollideany(self, stop_group):
+            can_walk = False
+        else:
+            door = pygame.sprite.spritecollideany(self, door_group)
+            door: Union['Door', pygame.sprite.Sprite]
+            if door is not None and door.is_active:
+                can_walk = False
 
         if pos_after_move != pos_before_move:
             self.change_sprites(pos_before_move, pos_after_move)
@@ -341,7 +353,7 @@ class WaterPlayer(Player):
         self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_WATER_PLAYER))
 
 
-class ElementSprite(Sprite):
+class ElementSprite(BaseSprite):
     """Общий класс для элементов, с которыми могут взаимодействовать игроки"""
 
     fire_player = None
@@ -373,7 +385,7 @@ class ElementSprite(Sprite):
         self.rect = self.image.get_rect()
         self.set_pos(*pos)
 
-    def interact_with(self, player):
+    def interact_with(self, subject):
         """Взаимодействие игрока с текущим элементом"""
         pass
 
@@ -389,12 +401,12 @@ class Ruby(ElementSprite):
         self.set_active(True)
 
     def load_images(self):
-        inactive_image = self.get_empty_image()
-        active_image = self.sprite_sheet.get_cell_image(0, 0)
+        inactive_image = self.sprite_sheet.get_cell_image(0, 0)
+        active_image = self.sprite_sheet.get_cell_image(1, 0)
         self.images = [inactive_image, active_image]
 
-    def interact_with(self, player):
-        if player == self.fire_player:
+    def interact_with(self, subject):
+        if subject == self.fire_player:
             self.is_interacted = True
             self.set_active(False)
             self.kill()
@@ -408,12 +420,12 @@ class Aquamarine(ElementSprite):
         self.set_active(True)
 
     def load_images(self):
-        inactive_image = self.get_empty_image()
-        active_image = self.sprite_sheet.get_cell_image(1, 0)
+        inactive_image = self.sprite_sheet.get_cell_image(2, 0)
+        active_image = self.sprite_sheet.get_cell_image(3, 0)
         self.images = [inactive_image, active_image]
 
-    def interact_with(self, player):
-        if player == self.water_player:
+    def interact_with(self, subject):
+        if subject == self.water_player:
             self.is_interacted = True
             self.set_active(False)
             self.kill()
@@ -427,8 +439,8 @@ class FireExit(ElementSprite):
         active_image = self.sprite_sheet.get_cell_image(1, 1)
         self.images = [inactive_image, active_image]
 
-    def interact_with(self, player):
-        if self.is_active and player == self.fire_player:
+    def interact_with(self, subject):
+        if self.is_active and subject == self.fire_player:
             self.is_interacted = True
 
 
@@ -440,12 +452,69 @@ class WaterExit(ElementSprite):
         active_image = self.sprite_sheet.get_cell_image(3, 1)
         self.images = [inactive_image, active_image]
 
-    def interact_with(self, player):
-        if self.is_active and player == self.water_player:
+    def interact_with(self, subject):
+        if self.is_active and subject == self.water_player:
             self.is_interacted = True
 
 
-class LevelSprite(Sprite):
+class Door(ElementSprite):
+    """Класс для кнопки открытия двери"""
+
+    def __init__(self, col, row, kind):
+        self.kind = kind
+        super().__init__(col, row)
+        self.set_active(True)
+        self.button = None
+
+    def load_images(self):
+        sprite_row = 1 + self.kind
+        inactive_image = self.sprite_sheet.get_cell_image(2, sprite_row)
+        active_image = self.sprite_sheet.get_cell_image(3, sprite_row)
+        self.images = [inactive_image, active_image]
+
+    def connect_to(self, button):
+        self.button = button
+
+    def interact_with(self, subject):
+        if subject == self.button:
+            self.set_active(False)
+            self.is_interacted = True
+
+    def update(self):
+        if not self.is_interacted and not self.is_active:
+            if not pygame.sprite.collide_rect(self, self.water_player) and \
+                    not pygame.sprite.collide_rect(self, self.fire_player):
+                self.set_active(True)
+
+
+class DoorButton(ElementSprite):
+    """Класс для кнопки открытия двери"""
+
+    def __init__(self, col, row, kind):
+        self.kind = kind
+        super().__init__(col, row)
+        self.door = None
+
+    def load_images(self):
+        sprite_row = 1 + self.kind
+        inactive_image = self.sprite_sheet.get_cell_image(0, sprite_row)
+        active_image = self.sprite_sheet.get_cell_image(1, sprite_row)
+        self.images = [inactive_image, active_image]
+
+    def connect_door(self, door):
+        self.door = door
+
+    def interact_with(self, subject):
+        self.set_active(True)
+        self.door.interact_with(self)
+        self.is_interacted = True
+
+    def update(self):
+        if not self.is_interacted and self.is_active:
+            self.set_active(False)
+
+
+class LevelSprite(BaseSprite):
     """Класс для спрайтов уровней при выборе уровня"""
 
     def __init__(self, col, row, number, is_unlocked, is_done):
@@ -455,7 +524,7 @@ class LevelSprite(Sprite):
         self.is_unlocked = is_unlocked
         self.is_done = is_done
 
-        self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, 'level_icons.png'))
+        self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_LEVEL_ICONS))
         self.define_image()
         self.sprite_sheet = None
 
@@ -512,7 +581,9 @@ class Level:
         blocks_set = {LEVEL_BLOCK_EMPTY, LEVEL_BLOCK_WALL, LEVEL_BLOCK_FLOOR,
                       LEVEL_BLOCK_LAVA, LEVEL_BLOCK_RIVER, LEVEL_BLOCK_ACID}
         elem_set = {LEVEL_ELEM_RUBY, LEVEL_ELEM_AQUAMARINE,
-                    LEVEL_ELEM_FIRE_EXIT, LEVEL_ELEM_WATER_EXIT}
+                    LEVEL_ELEM_FIRE_EXIT, LEVEL_ELEM_WATER_EXIT,
+                    LEVEL_ELEM_DOORBUTTON_1, LEVEL_ELEM_DOORBUTTON_2,
+                    LEVEL_ELEM_DOOR_1, LEVEL_ELEM_DOOR_2}
 
         self.blocks = [[0] * self.width for _ in range(self.height)]
         for row, line in enumerate(data):
@@ -646,7 +717,7 @@ class StartScreen(Screen):
         self.level_sprite: Optional[LevelSprite] = None
 
     def reset_screen(self):
-        Sprite.reset_offset()
+        BaseSprite.reset_offset()
         self.screen_sprites.empty()
         self.level_sprites.empty()
         self.create_levels()
@@ -749,21 +820,22 @@ class Game:
         self.river_sprites = pygame.sprite.Group()
         self.acid_sprites = pygame.sprite.Group()
 
-        self.elements_group = pygame.sprite.Group()
-        self.ruby_group = pygame.sprite.Group()
-        self.aquamarine_group = pygame.sprite.Group()
+        self.elements_sprites = pygame.sprite.Group()
+        self.ruby_sprites = pygame.sprite.Group()
+        self.aquamarine_sprites = pygame.sprite.Group()
+        self.door_sprites = pygame.sprite.Group()
 
         self.fire_player = None
         self.water_player = None
         self.fire_exit = None
         self.water_exit = None
 
+        self.door_connection = {}
+
     def reset_game(self):
-        Sprite.reset_offset()
-        for group in [self.all_sprites, self.wall_sprites,
-                      self.lava_sprites, self.river_sprites, self.acid_sprites,
-                      self.elements_group, self.ruby_group, self.aquamarine_group]:
-            group.empty()
+        BaseSprite.reset_offset()
+        for sprite in self.all_sprites:
+            sprite.kill()
 
         self.fire_player = None
         self.water_player = None
@@ -775,7 +847,7 @@ class Game:
         self.reset_game()
 
         level = Level(levelname)
-        Sprite.set_offset(level.col_offset, level.row_offset)
+        BaseSprite.set_offset(level.col_offset, level.row_offset)
 
         for row in range(level.height):
             for col in range(level.width):
@@ -815,25 +887,56 @@ class Game:
             for col, row in level.elem_pos_dict[elem]:
                 if elem == LEVEL_ELEM_RUBY:
                     level_sprite = Ruby(col, row)
-                    self.ruby_group.add(level_sprite)
+                    self.ruby_sprites.add(level_sprite)
                 elif elem == LEVEL_ELEM_AQUAMARINE:
                     level_sprite = Aquamarine(col, row)
-                    self.aquamarine_group.add(level_sprite)
+                    self.aquamarine_sprites.add(level_sprite)
                 elif elem == LEVEL_ELEM_FIRE_EXIT:
                     level_sprite = FireExit(col, row)
                     self.fire_exit = level_sprite
                 elif elem == LEVEL_ELEM_WATER_EXIT:
                     level_sprite = WaterExit(col, row)
                     self.water_exit = level_sprite
+                elif elem == LEVEL_ELEM_DOORBUTTON_1:
+                    level_sprite = DoorButton(col, row, 1)
+                    self.door_connection[elem] = level_sprite
+                elif elem == LEVEL_ELEM_DOORBUTTON_2:
+                    level_sprite = DoorButton(col, row, 2)
+                    self.door_connection[elem] = level_sprite
+                elif elem == LEVEL_ELEM_DOOR_1:
+                    level_sprite = Door(col, row, 1)
+                    self.door_connection[elem] = level_sprite
+                    self.door_sprites.add(level_sprite)
+                elif elem == LEVEL_ELEM_DOOR_2:
+                    level_sprite = Door(col, row, 2)
+                    self.door_connection[elem] = level_sprite
+                    self.door_sprites.add(level_sprite)
                 else:
                     continue
-                self.elements_group.add(level_sprite)
+                self.elements_sprites.add(level_sprite)
                 self.all_sprites.add(level_sprite)
+
+        self.connect_elements()
 
         self.win_game = False
         self.game_over = False
 
         self.do_interaction_checks()
+
+    def connect_elements(self):
+        if LEVEL_ELEM_DOORBUTTON_1 in self.door_connection and \
+                LEVEL_ELEM_DOOR_1 in self.door_connection:
+            button = self.door_connection[LEVEL_ELEM_DOORBUTTON_1]
+            door = self.door_connection[LEVEL_ELEM_DOOR_1]
+            button.connect_door(door)
+            door.connect_to(button)
+
+        if LEVEL_ELEM_DOORBUTTON_2 in self.door_connection and \
+                LEVEL_ELEM_DOOR_2 in self.door_connection:
+            button = self.door_connection[LEVEL_ELEM_DOORBUTTON_2]
+            door = self.door_connection[LEVEL_ELEM_DOOR_2]
+            button.connect_door(door)
+            door.connect_to(button)
 
     def process_events(self):
         """Обработка событий игры"""
@@ -842,21 +945,21 @@ class Game:
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_a:
-                    self.fire_player.move_to_cell(-1, 0, self.wall_sprites)
+                    self.fire_player.move_to_cell(-1, 0, self.wall_sprites, self.door_sprites)
                 elif event.key == pygame.K_d:
-                    self.fire_player.move_to_cell(1, 0, self.wall_sprites)
+                    self.fire_player.move_to_cell(1, 0, self.wall_sprites, self.door_sprites)
                 elif event.key == pygame.K_w:
-                    self.fire_player.move_to_cell(0, -1, self.wall_sprites)
+                    self.fire_player.move_to_cell(0, -1, self.wall_sprites, self.door_sprites)
                 elif event.key == pygame.K_s:
-                    self.fire_player.move_to_cell(0, 1, self.wall_sprites)
+                    self.fire_player.move_to_cell(0, 1, self.wall_sprites, self.door_sprites)
                 elif event.key == pygame.K_LEFT:
-                    self.water_player.move_to_cell(-1, 0, self.wall_sprites)
+                    self.water_player.move_to_cell(-1, 0, self.wall_sprites, self.door_sprites)
                 elif event.key == pygame.K_RIGHT:
-                    self.water_player.move_to_cell(1, 0, self.wall_sprites)
+                    self.water_player.move_to_cell(1, 0, self.wall_sprites, self.door_sprites)
                 elif event.key == pygame.K_UP:
-                    self.water_player.move_to_cell(0, -1, self.wall_sprites)
+                    self.water_player.move_to_cell(0, -1, self.wall_sprites, self.door_sprites)
                 elif event.key == pygame.K_DOWN:
-                    self.water_player.move_to_cell(0, 1, self.wall_sprites)
+                    self.water_player.move_to_cell(0, 1, self.wall_sprites, self.door_sprites)
 
         pressed_key = pygame.key.get_pressed()
         # Если нажаты левый и/или правый CTRL,
@@ -869,7 +972,7 @@ class Game:
             interaction_list.append(self.water_player)
         for player in interaction_list:
             elem_sprite: Union[pygame.sprite.Sprite, ElementSprite]
-            elem_sprite = pygame.sprite.spritecollideany(player, self.elements_group)
+            elem_sprite = pygame.sprite.spritecollideany(player, self.elements_sprites)
             if elem_sprite is not None:
                 elem_sprite.interact_with(player)
                 interaction = True
@@ -878,10 +981,10 @@ class Game:
 
     def do_interaction_checks(self):
         if not self.fire_exit.is_active:
-            if not len(self.ruby_group):
+            if not len(self.ruby_sprites):
                 self.fire_exit.set_active(True)
         if not self.water_exit.is_active:
-            if not len(self.aquamarine_group):
+            if not len(self.aquamarine_sprites):
                 self.water_exit.set_active(True)
 
     def update(self):
@@ -900,7 +1003,7 @@ class Game:
             self.game_over = True
             return
 
-        for elem_sprite in self.elements_group:
+        for elem_sprite in self.elements_sprites:
             elem_sprite: Union[pygame.sprite.Sprite, ElementSprite]
             elem_sprite.reset_interaction()
 
