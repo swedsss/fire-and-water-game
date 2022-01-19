@@ -441,27 +441,51 @@ class Aquamarine(ElementSprite):
 class FireExit(ElementSprite):
     """Класс для завершения уровня для игрока 'Огонь'"""
 
+    def __init__(self, col, row):
+        super().__init__(col, row)
+        self.ruby_sprites = pygame.sprite.Group()
+
     def load_images(self):
         inactive_image = self.sprite_sheet.get_cell_image(0, 1)
         active_image = self.sprite_sheet.get_cell_image(1, 1)
         self.images = [inactive_image, active_image]
 
+    def connect(self, stone):
+        self.ruby_sprites.add(stone)
+
     def interact_with(self, subject):
         if self.is_active and subject == self.fire_player:
             self.is_interacted = True
 
+    def update(self):
+        if not self.is_active:
+            if not len(self.ruby_sprites):
+                self.set_active(True)
+
 
 class WaterExit(ElementSprite):
     """Класс для завершения уровня для игрока 'Огонь'"""
+
+    def __init__(self, col, row):
+        super().__init__(col, row)
+        self.aquamarine_sprites = pygame.sprite.Group()
 
     def load_images(self):
         inactive_image = self.sprite_sheet.get_cell_image(2, 1)
         active_image = self.sprite_sheet.get_cell_image(3, 1)
         self.images = [inactive_image, active_image]
 
+    def connect(self, stone):
+        self.aquamarine_sprites.add(stone)
+
     def interact_with(self, subject):
         if self.is_active and subject == self.water_player:
             self.is_interacted = True
+
+    def update(self):
+        if not self.is_active:
+            if not len(self.aquamarine_sprites):
+                self.set_active(True)
 
 
 class Door(ElementSprite):
@@ -471,7 +495,7 @@ class Door(ElementSprite):
         self.kind = kind
         super().__init__(col, row)
         self.set_active(True)
-        self.button = None
+        self.button_set = set()
 
     def load_images(self):
         sprite_row = 1 + self.kind
@@ -480,10 +504,10 @@ class Door(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def connect_to(self, button):
-        self.button = button
+        self.button_set.add(button)
 
     def interact_with(self, subject):
-        if subject == self.button:
+        if subject in self.button_set:
             self.set_active(False)
             self.is_interacted = True
 
@@ -500,7 +524,7 @@ class DoorButton(ElementSprite):
     def __init__(self, col, row, kind):
         self.kind = kind
         super().__init__(col, row)
-        self.door = None
+        self.door_set = set()
 
     def load_images(self):
         sprite_row = 1 + self.kind
@@ -509,11 +533,12 @@ class DoorButton(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def connect_door(self, door):
-        self.door = door
+        self.door_set.add(door)
 
     def interact_with(self, subject):
         self.set_active(True)
-        self.door.interact_with(self)
+        for door in self.door_set:
+            door.interact_with(self)
         self.is_interacted = True
 
     def update(self):
@@ -543,6 +568,9 @@ class Portal(ElementSprite):
     def set_output(self, is_output):
         self.set_active(is_output)
 
+    def reverse_output(self):
+        self.set_output(not self.is_output())
+
     def connect_portal(self, portal):
         self.other_portal = portal
 
@@ -562,8 +590,8 @@ class PortalSwitch(ElementSprite):
         super().__init__(col, row)
         self.set_active(False)
 
-        self.input_portal = None
-        self.output_portal = None
+        self.portal_set = set()
+        self.other_switches_set = set()
 
     def load_images(self):
         sprite_row = 3 + self.kind
@@ -572,18 +600,24 @@ class PortalSwitch(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def connect_portals(self, input_portal, output_portal):
-        self.input_portal = input_portal
-        self.output_portal = output_portal
+        self.portal_set.add(input_portal)
+        self.portal_set.add(output_portal)
+
+    def connect_other_switches(self, switch):
+        if self != switch:
+            self.other_switches_set.add(switch)
 
     def interact_with(self, subject):
-        if subject in [self.fire_player, self.water_player] and \
-                self.input_portal is not None and \
-                self.output_portal is not None:
+        if subject in [self.fire_player, self.water_player]:
             if not self.is_paused:
                 self.set_active(not self.is_active)
-                self.input_portal.set_output(True)
-                self.output_portal.set_output(False)
-                self.input_portal, self.output_portal = self.output_portal, self.input_portal
+                for switch in self.other_switches_set:
+                    switch.set_active(self.is_active)
+                for portal in self.portal_set:
+                    portal.reverse_output()
+                # self.input_portal.set_output(True)
+                # self.output_portal.set_output(False)
+                # self.input_portal, self.output_portal = self.output_portal, self.input_portal
                 self.is_paused = True
 
             self.is_interacted = True
@@ -663,13 +697,13 @@ class Level:
 
         blocks_set = {LEVEL_BLOCK_EMPTY, LEVEL_BLOCK_WALL, LEVEL_BLOCK_FLOOR,
                       LEVEL_BLOCK_LAVA, LEVEL_BLOCK_RIVER, LEVEL_BLOCK_ACID}
-        elem_set = {LEVEL_ELEM_RUBY, LEVEL_ELEM_AQUAMARINE,
-                    LEVEL_ELEM_FIRE_EXIT, LEVEL_ELEM_WATER_EXIT,
-                    LEVEL_ELEM_DOORBUTTON_1, LEVEL_ELEM_DOORBUTTON_2,
-                    LEVEL_ELEM_DOOR_1, LEVEL_ELEM_DOOR_2,
-                    LEVEL_ELEM_INPUT_PORTAL_1, LEVEL_ELEM_INPUT_PORTAL_2,
-                    LEVEL_ELEM_OUTPUT_PORTAL_1, LEVEL_ELEM_OUTPUT_PORTAL_2,
-                    LEVEL_ELEM_PORTAL_SWITCH_1, LEVEL_ELEM_PORTAL_SWITCH_2}
+        elem_single_set = {LEVEL_ELEM_FIRE_EXIT, LEVEL_ELEM_WATER_EXIT,
+                           LEVEL_ELEM_INPUT_PORTAL_1, LEVEL_ELEM_INPUT_PORTAL_2,
+                           LEVEL_ELEM_OUTPUT_PORTAL_1, LEVEL_ELEM_OUTPUT_PORTAL_2}
+        elems_multi_set = {LEVEL_ELEM_RUBY, LEVEL_ELEM_AQUAMARINE,
+                           LEVEL_ELEM_DOORBUTTON_1, LEVEL_ELEM_DOORBUTTON_2,
+                           LEVEL_ELEM_DOOR_1, LEVEL_ELEM_DOOR_2,
+                           LEVEL_ELEM_PORTAL_SWITCH_1, LEVEL_ELEM_PORTAL_SWITCH_2}
 
         self.blocks = [[0] * self.width for _ in range(self.height)]
         for row, line in enumerate(data):
@@ -679,10 +713,12 @@ class Level:
                     self.fire_player_pos = col, row
                 elif elem == LEVEL_PLAYER_WATER:
                     self.water_player_pos = col, row
-                elif elem in elem_set:
+                elif elem in elem_single_set:
+                    self.elem_pos_dict[elem] = [(col, row)]
+                elif elem in elems_multi_set:
                     if elem not in self.elem_pos_dict:
-                        self.elem_pos_dict[elem] = set()
-                    self.elem_pos_dict[elem].add((col, row))
+                        self.elem_pos_dict[elem] = []
+                    self.elem_pos_dict[elem].append((col, row))
 
         self.indexes = [[0] * self.width for _ in range(self.height)]
         self.calculate_indexes()
@@ -899,6 +935,7 @@ class Game:
         self.running = True
         self.game_over = False
         self.win_game = False
+        self.with_end_screen = False
 
         self.all_sprites = pygame.sprite.Group()
         self.wall_sprites = pygame.sprite.Group()
@@ -907,8 +944,6 @@ class Game:
         self.acid_sprites = pygame.sprite.Group()
 
         self.elements_sprites = pygame.sprite.Group()
-        self.ruby_sprites = pygame.sprite.Group()
-        self.aquamarine_sprites = pygame.sprite.Group()
         self.door_sprites = pygame.sprite.Group()
 
         self.fire_player = None
@@ -927,6 +962,8 @@ class Game:
         self.water_player = None
         self.fire_exit = None
         self.water_exit = None
+
+        self.connection_dict.clear()
 
     def new_game(self, levelname):
         """Создание новой игры"""
@@ -960,44 +997,37 @@ class Game:
             for col, row in level.elem_pos_dict[elem]:
                 if elem == LEVEL_ELEM_RUBY:
                     level_sprite = Ruby(col, row)
-                    self.ruby_sprites.add(level_sprite)
                 elif elem == LEVEL_ELEM_AQUAMARINE:
                     level_sprite = Aquamarine(col, row)
-                    self.aquamarine_sprites.add(level_sprite)
                 elif elem == LEVEL_ELEM_FIRE_EXIT:
                     level_sprite = FireExit(col, row)
                     self.fire_exit = level_sprite
                 elif elem == LEVEL_ELEM_WATER_EXIT:
                     level_sprite = WaterExit(col, row)
                     self.water_exit = level_sprite
-                elif elem == LEVEL_ELEM_DOORBUTTON_1:
+                elif elem == LEVEL_ELEM_DOORBUTTON_1 or \
+                        elem == LEVEL_ELEM_DOORBUTTON_2:
                     level_sprite = DoorButton(col, row, level.get_kind(elem))
-                    self.connection_dict[elem] = level_sprite
-                elif elem == LEVEL_ELEM_DOORBUTTON_2:
-                    level_sprite = DoorButton(col, row, level.get_kind(elem))
-                    self.connection_dict[elem] = level_sprite
-                elif elem == LEVEL_ELEM_DOOR_1:
+                elif elem == LEVEL_ELEM_DOOR_1 or \
+                        elem == LEVEL_ELEM_DOOR_2:
                     level_sprite = Door(col, row, level.get_kind(elem))
-                    self.connection_dict[elem] = level_sprite
-                    self.door_sprites.add(level_sprite)
-                elif elem == LEVEL_ELEM_DOOR_2:
-                    level_sprite = Door(col, row, level.get_kind(elem))
-                    self.connection_dict[elem] = level_sprite
                     self.door_sprites.add(level_sprite)
                 elif elem == LEVEL_ELEM_INPUT_PORTAL_1 or \
                         elem == LEVEL_ELEM_INPUT_PORTAL_2:
                     level_sprite = Portal(col, row, level.get_kind(elem), False)
-                    self.connection_dict[elem] = level_sprite
                 elif elem == LEVEL_ELEM_OUTPUT_PORTAL_1 or \
                         elem == LEVEL_ELEM_OUTPUT_PORTAL_2:
                     level_sprite = Portal(col, row, level.get_kind(elem), True)
-                    self.connection_dict[elem] = level_sprite
                 elif elem == LEVEL_ELEM_PORTAL_SWITCH_1 or \
                         elem == LEVEL_ELEM_PORTAL_SWITCH_2:
                     level_sprite = PortalSwitch(col, row, level.get_kind(elem))
-                    self.connection_dict[elem] = level_sprite
                 else:
                     continue
+
+                if elem not in self.connection_dict:
+                    self.connection_dict[elem] = []
+                self.connection_dict[elem].append(level_sprite)
+
                 self.elements_sprites.add(level_sprite)
                 self.all_sprites.add(level_sprite)
 
@@ -1019,34 +1049,46 @@ class Game:
         self.win_game = False
         self.game_over = False
 
-        self.do_interaction_checks()
-
     def connect_elements(self):
+        for level_elem_stone, level_elem_exit in \
+                [(LEVEL_ELEM_RUBY, LEVEL_ELEM_FIRE_EXIT),
+                 (LEVEL_ELEM_AQUAMARINE, LEVEL_ELEM_WATER_EXIT)]:
+
+            if level_elem_stone in self.connection_dict and \
+                    level_elem_exit in self.connection_dict:
+                level_exit = self.connection_dict[level_elem_exit][0]
+                for stone in self.connection_dict[level_elem_stone]:
+                    level_exit.connect(stone)
+
         for level_elem_doorbutton, level_elem_door in \
                 [(LEVEL_ELEM_DOORBUTTON_1, LEVEL_ELEM_DOOR_1),
                  (LEVEL_ELEM_DOORBUTTON_2, LEVEL_ELEM_DOOR_2)]:
 
             if level_elem_doorbutton in self.connection_dict and \
                     level_elem_door in self.connection_dict:
-                button = self.connection_dict[level_elem_doorbutton]
-                door = self.connection_dict[level_elem_door]
-                button.connect_door(door)
-                door.connect_to(button)
+                for button in self.connection_dict[level_elem_doorbutton]:
+                    for door in self.connection_dict[level_elem_door]:
+                        button.connect_door(door)
+                        door.connect_to(button)
 
         for level_elem_input_portal, level_elem_output_portal, level_elem_portal_switch in \
                 [(LEVEL_ELEM_INPUT_PORTAL_1, LEVEL_ELEM_OUTPUT_PORTAL_1, LEVEL_ELEM_PORTAL_SWITCH_1),
-                 (
-                 LEVEL_ELEM_INPUT_PORTAL_2, LEVEL_ELEM_OUTPUT_PORTAL_2, LEVEL_ELEM_PORTAL_SWITCH_2)]:
+                 (LEVEL_ELEM_INPUT_PORTAL_2, LEVEL_ELEM_OUTPUT_PORTAL_2, LEVEL_ELEM_PORTAL_SWITCH_2)
+                 ]:
 
             if level_elem_input_portal in self.connection_dict and \
                     level_elem_output_portal in self.connection_dict:
-                input_portal = self.connection_dict[level_elem_input_portal]
-                output_portal = self.connection_dict[level_elem_output_portal]
+                input_portal = self.connection_dict[level_elem_input_portal][0]
+                output_portal = self.connection_dict[level_elem_output_portal][0]
                 input_portal.connect_portal(output_portal)
                 output_portal.connect_portal(input_portal)
                 if level_elem_portal_switch in self.connection_dict:
-                    switch = self.connection_dict[level_elem_portal_switch]
-                    switch.connect_portals(input_portal, output_portal)
+                    switch: PortalSwitch
+                    for switch in self.connection_dict[level_elem_portal_switch]:
+                        switch.connect_portals(input_portal, output_portal)
+                        for other_switch in self.connection_dict[level_elem_portal_switch]:
+                            if switch != other_switch:
+                                switch.connect_other_switches(other_switch)
 
     def process_events(self):
         """Обработка событий игры"""
@@ -1054,6 +1096,9 @@ class Game:
             if event.type == pygame.QUIT:
                 sys.exit()
             if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.game_over = True
+                    self.with_end_screen = False
                 if event.key == pygame.K_a:
                     self.fire_player.move_to_cell(-1, 0, self.wall_sprites, self.door_sprites)
                 elif event.key == pygame.K_d:
@@ -1075,7 +1120,6 @@ class Game:
         # Если нажаты левый и/или правый CTRL,
         # то соответствующий игрок взаимодействует с предметом, с которым пересекается
         interaction_list = []
-        interaction = False
         if pressed_key[pygame.K_LCTRL]:
             interaction_list.append(self.fire_player)
         if pressed_key[pygame.K_RCTRL]:
@@ -1085,17 +1129,6 @@ class Game:
             elem_sprite = pygame.sprite.spritecollideany(player, self.elements_sprites)
             if elem_sprite is not None:
                 elem_sprite.interact_with(player)
-                interaction = True
-        if interaction:
-            self.do_interaction_checks()
-
-    def do_interaction_checks(self):
-        if not self.fire_exit.is_active:
-            if not len(self.ruby_sprites):
-                self.fire_exit.set_active(True)
-        if not self.water_exit.is_active:
-            if not len(self.aquamarine_sprites):
-                self.water_exit.set_active(True)
 
     def update(self):
         """Обновление спрайтов"""
@@ -1105,12 +1138,14 @@ class Game:
             if not player.alive:
                 self.win_game = False
                 self.game_over = True
+                self.with_end_screen = True
                 return
 
         if self.water_exit.is_interacted and self.water_exit.is_interacted:
             self.win_game = True
             self.start_screen.unlock_new_level()
             self.game_over = True
+            self.with_end_screen = True
             return
 
         for elem_sprite in self.elements_sprites:
@@ -1150,7 +1185,8 @@ def main():
         mygame.show_start_screen()
         mygame.new_game(mygame.levelname)
         mygame.run()
-        mygame.show_end_screen()
+        if mygame.with_end_screen:
+            mygame.show_end_screen()
 
     pygame.quit()
 
