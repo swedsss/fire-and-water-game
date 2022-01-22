@@ -11,11 +11,18 @@ TITLE = 'ОГОНЬ и ВОДА'
 SCREEN_WIDTH = MAX_LEVEL_SIZE * SPRITE_SIZE
 SCREEN_HEIGHT = MAX_LEVEL_SIZE * SPRITE_SIZE
 
-FPS = 30
+TURBO_MODE = False
 
+FPS = 30 if not TURBO_MODE else 100
+PLAYER_STEP = SPRITE_SIZE // (8 if not TURBO_MODE else 4)
+PlAYER_ANIMATION_DURATION = 70 if not TURBO_MODE else 10
+
+# Константы цветов
 BLACK = pygame.Color('black')
 WHITE = pygame.Color('white')
+GREEN = pygame.Color('green')
 
+# Константы папок и путей к ним
 DIR_NAME_LEVELS = 'levels'
 DIR_NAME_IMAGES = 'img'
 
@@ -23,6 +30,7 @@ CURRENT_DIR = os.path.dirname(__file__)
 LEVELS_DIR = os.path.join(CURRENT_DIR, DIR_NAME_LEVELS)
 IMG_DIR = os.path.join(CURRENT_DIR, DIR_NAME_IMAGES)
 
+# Константы имён файлов
 CSV_FILE_SAVE = "save.csv"
 
 SPRITE_FILE_WALLS = "walls.png"
@@ -37,6 +45,7 @@ SPRITE_FILE_LEVEL_ICONS = "level_icons.png"
 
 IMG_FILE_TITLE = "title.png"
 
+# Константы обозначений блоков и элементов на уровне
 LEVEL_BLOCK_EMPTY = " "
 LEVEL_BLOCK_FLOOR = "."
 LEVEL_BLOCK_WALL = "#"
@@ -62,9 +71,7 @@ LEVEL_ELEM_OUTPUT_PORTAL_2 = "O"
 LEVEL_ELEM_PORTAL_SWITCH_1 = "y"
 LEVEL_ELEM_PORTAL_SWITCH_2 = "Y"
 
-PLAYER_STEP = SPRITE_SIZE // 8
-PlAYER_ANIMATION_DURATION = 70
-
+# Константы для цветов на начальном и конечном экранах
 SCREEN_BG_COLOR1 = "bg_color1"
 SCREEN_BG_COLOR2 = "bg_color2"
 SCREEN_SHADOW_COLOR = "shadow_color"
@@ -95,12 +102,14 @@ class SpriteSheet:
         self.sprite_sheet = pygame.image.load(file_name).convert()
 
     def get_image(self, x, y, width, height):
+        """Получение фрагмента из набора спрайтов, заданного координатами и размерами"""
         image = pygame.Surface((width, height)).convert()
         image.blit(self.sprite_sheet, (0, 0), pygame.Rect(x, y, width, height))
         image.set_colorkey(BLACK)
         return pygame.transform.scale(image, (width, height))
 
     def get_cell_image(self, col, row, width=SPRITE_SIZE, height=SPRITE_SIZE):
+        """Получение фрагмента, заданного столбцом и строкой"""
         return self.get_image(col * width, row * height, width, height)
 
 
@@ -114,6 +123,7 @@ class EdgeSpriteSheet(SpriteSheet):
     }
 
     def get_image_by_index(self, index):
+        """Получение фрагмента, заданного индексом"""
         if index < 0 or index >= 16:
             raise ValueError("Индекс должен быть в пределах от 0 до 15 включительно!")
         col, row = self.TILE_COORDS_DICT[index]
@@ -123,18 +133,20 @@ class EdgeSpriteSheet(SpriteSheet):
 class BaseSprite(pygame.sprite.Sprite):
     """Общий класс для всех спрайтов на экране"""
 
+    # Сдвиг отображения спрайтов на уровне
     col_offset = 0
     row_offset = 0
 
     @classmethod
-    def reset_offset(cls):
-        cls.col_offset = 0
-        cls.row_offset = 0
-
-    @classmethod
     def set_offset(cls, col_offset, row_offset):
+        """Установка сдвига при отображении спрайтов"""
         cls.col_offset = col_offset
         cls.row_offset = row_offset
+
+    @classmethod
+    def reset_offset(cls):
+        """Сброс сдвига при отображении спрайтов"""
+        cls.set_offset(0, 0)
 
     @staticmethod
     def get_empty_image(width=SPRITE_SIZE, height=SPRITE_SIZE):
@@ -148,13 +160,16 @@ class BaseSprite(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
 
     def get_pos(self):
+        """Получение позиции центра спрайта"""
         return self.rect.centerx, self.rect.centery
 
     def set_pos(self, x, y):
+        """Задание позиции центра спрайта"""
         self.rect.centerx = x
         self.rect.centery = y
 
     def set_cell_pos(self, col, row):
+        """Задание позиции спрайта в табличном представлении и  с учётом сдвига"""
         new_col = col + self.col_offset
         new_row = row + self.row_offset
         self.set_pos(new_col * SPRITE_SIZE + SPRITE_SIZE // 2,
@@ -177,6 +192,8 @@ class BlockSprite(BaseSprite):
         self.sprite_sheet = None
 
     def define_sprite_sheet(self):
+        """Определение файла для набора спрайтов"""
+        # Метод реализован в дочерних классах.
         pass
 
 
@@ -234,7 +251,7 @@ class Player(BaseSprite):
         self.rect = self.image.get_rect()
         self.set_cell_pos(col, row)
 
-        self.alive = True
+        self.is_alive = True
         self.death_groups = []
 
         self.walk_offset = None
@@ -245,7 +262,7 @@ class Player(BaseSprite):
         pass
 
     def load_sprites(self):
-        """Загрузка спрайтов для анимаций перемещения"""
+        """Загрузка спрайтов для анимаций перемещения вверх, влево, вправо и вниз"""
         for row, sprite_list in enumerate([self.down_sprites, self.left_sprites,
                                            self.right_sprites, self.up_sprites]):
             for col in range(4):
@@ -253,12 +270,17 @@ class Player(BaseSprite):
                 sprite_list.append(image)
 
     def add_death_group(self, group):
+        """Определение групп спрайтов, при пересечении с которыми игрок погибает"""
         self.death_groups.append(group)
 
     def move_to_cell(self, col, row, stop_group, door_group):
         """Перемещение в соседнюю клетку"""
+
+        # Пока игрок двигается, задать новое движение нельзя
         if self.walk_offset is not None:
             return
+
+        # Координаты до и после перемещения
         pos_before_move = self.get_pos()
         self.rect = self.rect.move(col * SPRITE_SIZE, row * SPRITE_SIZE)
         pos_after_move = self.get_pos()
@@ -267,27 +289,37 @@ class Player(BaseSprite):
 
         can_walk = True
         if pygame.sprite.spritecollideany(self, stop_group):
+            # Пересечение со спрайтом из стоп-группы при перемещении.
+            # Значит, в соседнюю клетку переместиться нельзя.
             can_walk = False
         else:
+            # В соседней клекте дверь. Туда можно переместиться, если она открыта.
             door = pygame.sprite.spritecollideany(self, door_group)
             door: Union['Door', pygame.sprite.Sprite]
             if door is not None and door.is_active:
                 can_walk = False
 
+        # Если координаты отличаются, то происходит
+        # замена спрайтов, направленных по ходу движения игрока
         if pos_after_move != pos_before_move:
             self.change_sprites(pos_offset)
         else:
             return
 
+        # Если можно переместиться, то запоминается смещение
+        # относительно текущего положения (в пикселях)
         if can_walk:
             self.walk_offset = pos_offset
         else:
             self.image = self.sprites[-1]
             self.rect = self.image.get_rect()
 
+        # Возвращение персонажа на место после проверки
         self.set_pos(*pos_before_move)
 
     def change_sprites(self, pos_offset):
+        """Выбор группы спрайтов, направленных по ходу движения"""
+
         if pos_offset[0] < 0:
             self.sprites = self.left_sprites
         elif pos_offset[0] > 0:
@@ -298,28 +330,39 @@ class Player(BaseSprite):
             self.sprites = self.down_sprites
 
     def update(self):
+        # Если игрок не собирается перемещаться, то обработка метода заканчивается
         if self.walk_offset is None:
             return
 
+        # Анимация перемещения
         self.animate()
 
+        # Если игрок пришёл в нужное место,
+        # то происходит сброс переменных, заполняемых для перемещения
         if self.walk_offset == [0, 0]:
             self.reset_walking()
             self.after_move_checks()
 
     def animate(self):
+        """Анимация игрока при перемещении"""
+        # Фиксация текущего времени
         now = pygame.time.get_ticks()
         do_step = False
+        # Начало анимации
         if self.last_anim_tick is None:
             self.current_sprite_index = 0
             do_step = True
         elif now - self.last_anim_tick > PlAYER_ANIMATION_DURATION:
+            # Если после предыдущего шага прошло достаточно времени, то разрешаем его сделать
+            # при этом вычисляется индекс следующего кадра анимации
             self.current_sprite_index = (self.current_sprite_index + 1) % len(self.sprites)
             do_step = True
 
+        # Проверка, может ли игрок сделать шаг в нужную сторону
         if do_step is True:
             self.last_anim_tick = now
 
+            # Расчёт длины шага игрока
             step_x = min(abs(self.walk_offset[0]), PLAYER_STEP)
             if self.walk_offset[0] < 0:
                 step_x = - step_x
@@ -327,11 +370,14 @@ class Player(BaseSprite):
             if self.walk_offset[1] < 0:
                 step_y = - step_y
 
+            # Выполнение шага (смещение игрока на шаг)
+            # При этом относительные координаты уменьшаются на длину шага
             self.rect.centerx += step_x
             self.walk_offset[0] -= step_x
             self.rect.centery += step_y
             self.walk_offset[1] -= step_y
 
+            # Замена спрайта игрока
             self.change_sprites(self.walk_offset)
 
             pos_x, pos_y = self.get_pos()
@@ -340,6 +386,7 @@ class Player(BaseSprite):
             self.set_pos(pos_x, pos_y)
 
     def reset_walking(self):
+        """Сброс перемещения игрока"""
         self.walk_offset = None
         self.current_sprite_index = None
         self.last_anim_tick = None
@@ -348,7 +395,7 @@ class Player(BaseSprite):
         """Проверки после перемещения персонажа в соседнюю клетку"""
         for death_group in self.death_groups:
             if pygame.sprite.spritecollideany(self, death_group):
-                self.alive = False
+                self.is_alive = False
 
 
 class FirePlayer(Player):
@@ -389,17 +436,21 @@ class ElementSprite(BaseSprite):
         self.images = [image for _ in range(2)]
 
     def set_active(self, active):
+        """Изменение ссостояния активности объекта"""
         pos = self.get_pos()
         self.is_active = active
+        # Изменение спрайта
         self.image = self.images[1] if self.is_active else self.images[0]
         self.rect = self.image.get_rect()
         self.set_pos(*pos)
 
     def interact_with(self, subject):
-        """Взаимодействие игрока с текущим элементом"""
+        """Взаимодействие текущего элемента с другим элементом"""
+        # Метод реализован в дочерних классах
         pass
 
     def reset_interaction(self):
+        """Сброс признака взаимодействия"""
         self.is_interacted = False
 
 
@@ -417,6 +468,7 @@ class Ruby(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def connect_player(self, player):
+        """Соединение с игроком, который может взаимодействовать с объектом"""
         self.fire_player = player
 
     def interact_with(self, subject):
@@ -440,6 +492,7 @@ class Aquamarine(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def connect_player(self, player):
+        """Соединение с игроком, который может взаимодействовать с объектом"""
         self.water_player = player
 
     def interact_with(self, subject):
@@ -463,9 +516,11 @@ class FireExit(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def connect_player(self, player):
+        """Соединение с игроком, который может взаимодействовать с объектом"""
         self.fire_player = player
 
     def connect_stone(self, stone):
+        """Добавление камней, которые необходимы для активации выхода"""
         self.ruby_sprites.add(stone)
 
     def interact_with(self, subject):
@@ -475,6 +530,7 @@ class FireExit(ElementSprite):
     def update(self):
         if not self.is_active:
             if not len(self.ruby_sprites):
+                # Если камней на уровне не осталось, то выход активируется
                 self.set_active(True)
 
 
@@ -492,9 +548,11 @@ class WaterExit(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def connect_player(self, player):
+        """Соединение с игроком, который может взаимодействовать с объектом"""
         self.water_player = player
 
     def connect_stone(self, stone):
+        """Добавление камней, которые необходимы для активации выхода"""
         self.aquamarine_sprites.add(stone)
 
     def interact_with(self, subject):
@@ -504,6 +562,7 @@ class WaterExit(ElementSprite):
     def update(self):
         if not self.is_active:
             if not len(self.aquamarine_sprites):
+                # Если камней на уровне не осталось, то выход активируется
                 self.set_active(True)
 
 
@@ -521,10 +580,12 @@ class DoorButton(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def connect_door(self, door):
+        """Добавление двери в множество дверей, которые эта кнопка открывает"""
         self.door_set.add(door)
 
     def interact_with(self, subject):
         self.set_active(True)
+        # Взаимодействие кнопки с каждой подключенной дверью
         for door in self.door_set:
             door.interact_with(self)
         self.is_interacted = True
@@ -551,10 +612,12 @@ class Door(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def connect_players(self, fire_player, water_player):
+        """Добавление игроков, с которыми взаимодействует дверь"""
         self.fire_player = fire_player
         self.water_player = water_player
 
-    def connect_to_button(self, button):
+    def connect_button(self, button):
+        """Добавление кнопки в множество кнопок, которые могут открывать эту дверь"""
         self.button_set.add(button)
 
     def interact_with(self, subject):
@@ -586,18 +649,22 @@ class PortalSwitch(ElementSprite):
         self.images = [inactive_image, active_image]
 
     def connect_portals(self, input_portal, output_portal):
+        """Подключение входного и выходного портала к рычагу"""
         self.portal_set.add(input_portal)
         self.portal_set.add(output_portal)
 
     def connect_other_switches(self, switch):
+        """Подключение других рычагов (для одновременной смены состояний)"""
         if self != switch:
             self.other_switches_set.add(switch)
 
     def interact_with(self, subject):
         if not self.is_paused:
             self.set_active(not self.is_active)
+            # Смена состояний других рычагов
             for switch in self.other_switches_set:
                 switch.set_active(self.is_active)
+            # Смена направления подключенных порталов
             for portal in self.portal_set:
                 portal.reverse_direction()
             self.is_paused = True
@@ -631,9 +698,11 @@ class Portal(ElementSprite):
         self.set_active(is_input)
 
     def reverse_direction(self):
+        """Смена направления портала"""
         self.set_input(not self.is_input())
 
     def connect_portal(self, portal):
+        """Подключение другого портала в пару к текущему"""
         self.other_portal = portal
 
     def interact_with(self, subject):
@@ -663,22 +732,24 @@ class LevelSprite(BaseSprite):
         self.set_cell_pos(col, row)
 
     def define_image(self):
+        """Определение изображения для уровня, в зависимости от того пройден он или нет"""
         self.image = self.get_empty_image(SPRITE_SIZE, SPRITE_SIZE * 2)
         if not self.is_unlocked:
             image = self.sprite_sheet.get_cell_image(0, 0)
             color = None
         elif not self.is_done:
             image = self.sprite_sheet.get_cell_image(1, 0)
-            color = pygame.Color('white')
+            color = WHITE
         else:
             image = self.sprite_sheet.get_cell_image(2, 0)
-            color = pygame.Color('green')
+            color = GREEN
         self.image.blit(image, (0, 0))
         if color is not None:
             display_text(self.image, str(self.number), 24, color,
                          SPRITE_SIZE // 2, SPRITE_SIZE + SPRITE_SIZE // 2)
 
     def get_levelname(self):
+        """Получение имени файла по номеру уровня"""
         return f"level{self.number}.txt"
 
 
@@ -698,6 +769,7 @@ class Level:
 
     @staticmethod
     def get_kind(elem):
+        """Определение вид элемента по его обзначению"""
         return 1 if elem.isupper() else 0
 
     def load_level(self, filename):
@@ -707,23 +779,33 @@ class Level:
         with open(fullname) as f:
             data = [line.rstrip() for line in f.readlines()]
 
+        # Определение размеров уровня
         self.width = min([max(map(len, data)), MAX_LEVEL_SIZE])
         self.height = min([len(data), MAX_LEVEL_SIZE])
+        # Определение сдвига при отображении спрайтов уровня
         self.col_offset = (MAX_LEVEL_SIZE - self.width) // 2
         self.row_offset = (MAX_LEVEL_SIZE - self.height) // 2
+        # Добавление пустых элементов в неполных строках
+        # и обрезка уровня, который превышает максимальные размеры
         data = list(map(lambda x: x[:self.width].ljust(self.width, LEVEL_BLOCK_EMPTY),
                         data[:self.height]))
 
+        # Множество обозначений блоков
         blocks_set = {LEVEL_BLOCK_EMPTY, LEVEL_BLOCK_WALL, LEVEL_BLOCK_FLOOR,
                       LEVEL_BLOCK_LAVA, LEVEL_BLOCK_RIVER, LEVEL_BLOCK_ACID}
+        # Меожество обозначений элементов,
+        # которые могут присутствовать на уровне в единственном экземпляре
         elem_single_set = {LEVEL_ELEM_FIRE_EXIT, LEVEL_ELEM_WATER_EXIT,
                            LEVEL_ELEM_INPUT_PORTAL_1, LEVEL_ELEM_INPUT_PORTAL_2,
                            LEVEL_ELEM_OUTPUT_PORTAL_1, LEVEL_ELEM_OUTPUT_PORTAL_2}
+        # Меожество обозначений элементов,
+        # которые может быть несколько на уровне
         elems_multi_set = {LEVEL_ELEM_RUBY, LEVEL_ELEM_AQUAMARINE,
                            LEVEL_ELEM_DOORBUTTON_1, LEVEL_ELEM_DOORBUTTON_2,
                            LEVEL_ELEM_DOOR_1, LEVEL_ELEM_DOOR_2,
                            LEVEL_ELEM_PORTAL_SWITCH_1, LEVEL_ELEM_PORTAL_SWITCH_2}
 
+        # Заполнение данных об уровне
         self.blocks = [[0] * self.width for _ in range(self.height)]
         for row, line in enumerate(data):
             for col, elem in enumerate(line):
@@ -739,6 +821,7 @@ class Level:
                         self.elem_pos_dict[elem] = []
                     self.elem_pos_dict[elem].append((col, row))
 
+        # Подсчёт индексов на уровне
         self.indexes = [[0] * self.width for _ in range(self.height)]
         self.calculate_indexes()
 
@@ -775,6 +858,7 @@ class SaveFile:
         self.load_values()
 
     def load_values(self):
+        """Загрузка пройденного прогресса"""
         try:
             with open(self.filename, 'r', encoding="utf-8") as csvfile:
                 reader = csv.DictReader(csvfile, delimiter=';')
@@ -785,6 +869,7 @@ class SaveFile:
             return
 
     def save_values(self):
+        """Сохранение пройденного прогресса"""
         data = [self.headers, [self.levels_done]]
 
         with open(self.filename, 'w', encoding="utf-8", newline='') as csvfile:
@@ -815,7 +900,13 @@ class Screen:
                                      SPRITE_SIZE * self.text_cell_rect.width,
                                      SPRITE_SIZE * self.text_cell_rect.height)
 
+    def reset_screen(self):
+        """Сброс необходимых атрибутов перед показаом экрана"""
+        BaseSprite.reset_offset()
+        self.screen_sprites.empty()
+
     def prepare(self, surface):
+        """Прорисовка общего фона для экранов"""
         surface.fill(self.bg_color1)
         pygame.draw.rect(surface, self.bg_color2, self.text_rect)
         pygame.draw.rect(surface, self.shadow_color, self.shadow_rect)
@@ -825,23 +916,30 @@ class Screen:
         surface.blit(image, rect)
 
     def render(self, surface):
+        """Отрисовка всех элементов экрана"""
+        # Метод реализован в дочерних классах
         pass
 
     def process_events(self):
+        """Обработка событий экрана"""
         self.pause()
 
     @staticmethod
     def pause():
+        """Пауза"""
         waiting = True
         while waiting:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     sys.exit()
+                # Ожидание нажатия на Escape, Enter или пробел
                 if event.type == pygame.KEYDOWN:
                     if event.key in [pygame.K_ESCAPE, pygame.K_SPACE, pygame.K_RETURN]:
                         waiting = False
 
     def show(self, surface):
+        """Переключение на текущий экран"""
+        self.reset_screen()
         self.render(surface)
         self.process_events()
 
@@ -858,13 +956,13 @@ class StartScreen(Screen):
         self.level_sprite: Optional[LevelSprite] = None
 
     def reset_screen(self):
-        BaseSprite.reset_offset()
-        self.screen_sprites.empty()
+        super().reset_screen()
         self.level_sprites.empty()
         self.create_levels()
         self.level_sprite = None
 
     def create_levels(self):
+        """Создание спрайтов уровней"""
         for row in range(3):
             for col in range(3):
                 num = row * 3 + col + 1
@@ -880,11 +978,6 @@ class StartScreen(Screen):
 
                 self.screen_sprites.add(level)
                 self.level_sprites.add(level)
-
-    def show(self, surface):
-        self.reset_screen()
-        self.render(surface)
-        self.process_events()
 
     def process_events(self):
         waiting = True
@@ -908,6 +1001,8 @@ class StartScreen(Screen):
         pygame.display.flip()
 
     def unlock_new_level(self):
+        """Разблокировка следующего уровня"""
+        # Следующий уровень разблокируется если был пройден ещё не пройденный уровень
         if self.level_sprite.number > self.save_file.levels_done:
             self.save_file.levels_done += 1
             self.save_file.save_values()
@@ -921,6 +1016,7 @@ class EndScreen(Screen):
         self.win_game = False
 
     def set_result(self, result):
+        """Установка результатов игры"""
         self.win_game = result
 
     def render(self, surface):
@@ -956,6 +1052,7 @@ class Game:
         self.win_game = False
         self.with_end_screen = False
 
+        # Группы спрайтов
         self.all_sprites = pygame.sprite.Group()
         self.wall_sprites = pygame.sprite.Group()
         self.lava_sprites = pygame.sprite.Group()
@@ -965,6 +1062,7 @@ class Game:
         self.elements_sprites = pygame.sprite.Group()
         self.door_sprites = pygame.sprite.Group()
 
+        # Уникальные объекты
         self.fire_player = None
         self.water_player = None
         self.fire_exit = None
@@ -973,6 +1071,7 @@ class Game:
         self.connection_dict = {}
 
     def reset_game(self):
+        """Сброс атрибутов игры"""
         BaseSprite.reset_offset()
         for sprite in self.all_sprites:
             sprite.kill()
@@ -988,9 +1087,12 @@ class Game:
         """Создание новой игры"""
         self.reset_game()
 
+        # Создание обхекта с данными уровня
         level = Level(levelname)
+        # Загрузка сдвига для текущего уровня
         BaseSprite.set_offset(level.col_offset, level.row_offset)
 
+        # Создание спрайтов для блоков уровня
         for row in range(level.height):
             for col in range(level.width):
                 if level.blocks[row][col] == LEVEL_BLOCK_WALL:
@@ -1012,6 +1114,7 @@ class Game:
 
                 self.all_sprites.add(level_sprite)
 
+        # Создание спрайтов для элементов уровня
         for elem in level.elem_pos_dict:
             for col, row in level.elem_pos_dict[elem]:
                 if elem == LEVEL_ELEM_RUBY:
@@ -1043,6 +1146,7 @@ class Game:
                 else:
                     continue
 
+                # Добавление элементов в словарь соединений
                 if elem not in self.connection_dict:
                     self.connection_dict[elem] = []
                 self.connection_dict[elem].append(level_sprite)
@@ -1050,6 +1154,7 @@ class Game:
                 self.elements_sprites.add(level_sprite)
                 self.all_sprites.add(level_sprite)
 
+        # Создание спрайтов для игроков
         if level.fire_player_pos is not None:
             self.fire_player = FirePlayer(*level.fire_player_pos)
             self.all_sprites.add(self.fire_player)
@@ -1061,12 +1166,15 @@ class Game:
             for group in [self.lava_sprites, self.acid_sprites]:
                 self.water_player.add_death_group(group)
 
+        # Соединение элементов
         self.connect_elements()
 
         self.win_game = False
         self.game_over = False
 
     def connect_elements(self):
+        """Соединение элементов для корректной обработки взаимодействий"""
+        # Соединение камней, выходов из уровня и игроков
         for level_elem_stone, level_elem_exit, player in \
                 [(LEVEL_ELEM_RUBY, LEVEL_ELEM_FIRE_EXIT, self.fire_player),
                  (LEVEL_ELEM_AQUAMARINE, LEVEL_ELEM_WATER_EXIT, self.water_player)]:
@@ -1081,6 +1189,7 @@ class Game:
                         stone.connect_player(player)
                     level_exit.connect_stone(stone)
 
+        # Соединение кнопок, дверей и игроков
         for level_elem_doorbutton, level_elem_door in \
                 [(LEVEL_ELEM_DOORBUTTON_1, LEVEL_ELEM_DOOR_1),
                  (LEVEL_ELEM_DOORBUTTON_2, LEVEL_ELEM_DOOR_2)]:
@@ -1090,9 +1199,10 @@ class Game:
                 for button in self.connection_dict[level_elem_doorbutton]:
                     for door in self.connection_dict[level_elem_door]:
                         button.connect_door(door)
-                        door.connect_to_button(button)
+                        door.connect_button(button)
                         door.connect_players(self.fire_player, self.water_player)
 
+        # Соединение рычагов и порталов
         for level_elem_input_portal, level_elem_output_portal, level_elem_portal_switch in \
                 [(LEVEL_ELEM_INPUT_PORTAL_1, LEVEL_ELEM_OUTPUT_PORTAL_1, LEVEL_ELEM_PORTAL_SWITCH_1),
                  (LEVEL_ELEM_INPUT_PORTAL_2, LEVEL_ELEM_OUTPUT_PORTAL_2, LEVEL_ELEM_PORTAL_SWITCH_2)
@@ -1118,9 +1228,12 @@ class Game:
             if event.type == pygame.QUIT:
                 sys.exit()
             if event.type == pygame.KEYDOWN:
+                # Выход из уровня по кнопке Escape
                 if event.key == pygame.K_ESCAPE:
                     self.game_over = True
                     self.with_end_screen = False
+
+                # Клавиши для перемещения игроков
                 if event.key == pygame.K_a:
                     self.fire_player.move_to_cell(-1, 0, self.wall_sprites, self.door_sprites)
                 elif event.key == pygame.K_d:
@@ -1156,20 +1269,24 @@ class Game:
         """Обновление спрайтов"""
         self.all_sprites.update()
 
+        # Уровень не пройден, если один из игроков не выжил
         for player in [self.fire_player, self.water_player]:
-            if not player.alive:
+            if player is not None and not player.is_alive:
                 self.win_game = False
                 self.game_over = True
                 self.with_end_screen = True
                 return
 
-        if self.water_exit.is_interacted and self.water_exit.is_interacted:
+        # Уровень пройден, если произошло взаимодейтвие игроков с обоими выходами одновременно
+        if self.fire_exit is not None and self.fire_exit.is_interacted and \
+                self.water_exit is not None and self.water_exit.is_interacted:
             self.win_game = True
             self.start_screen.unlock_new_level()
             self.game_over = True
             self.with_end_screen = True
             return
 
+        # Сброс признака взаимодействия со всех элементов уровня
         for elem_sprite in self.elements_sprites:
             elem_sprite: Union[pygame.sprite.Sprite, ElementSprite]
             elem_sprite.reset_interaction()
@@ -1177,7 +1294,6 @@ class Game:
     def display(self):
         """Отрисовка элементов игры"""
         self.screen.fill(BLACK)
-
         self.all_sprites.draw(self.screen)
 
         pygame.display.flip()
@@ -1192,10 +1308,12 @@ class Game:
             self.clock.tick(FPS)
 
     def show_start_screen(self):
+        """Показ начального экрана"""
         self.start_screen.show(self.screen)
         self.levelname = self.start_screen.level_sprite.get_levelname()
 
     def show_end_screen(self):
+        """Показ конечного экрана"""
         self.end_screen.set_result(self.win_game)
         self.end_screen.show(self.screen)
 
