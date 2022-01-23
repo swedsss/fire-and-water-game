@@ -15,7 +15,7 @@ TURBO_MODE = False
 
 FPS = 30 if not TURBO_MODE else 100
 PLAYER_STEP = SPRITE_SIZE // (8 if not TURBO_MODE else 4)
-PlAYER_ANIMATION_DURATION = 70 if not TURBO_MODE else 10
+PLAYER_ANIMATION_DURATION = 70 if not TURBO_MODE else 10
 
 # Константы цветов
 BLACK = pygame.Color('black')
@@ -85,6 +85,11 @@ SCREEN_COLORS_DICT = {
 }
 
 
+def get_empty_image(width=SPRITE_SIZE, height=SPRITE_SIZE):
+    image = pygame.Surface((width, height), pygame.SRCALPHA, 32)
+    return image
+
+
 def display_text(surface, text, size, color, x, y):
     """Отображение текста"""
     font = pygame.font.SysFont("sans-serif", size)
@@ -99,13 +104,12 @@ class SpriteSheet:
     """Набор спрайтов"""
 
     def __init__(self, file_name):
-        self.sprite_sheet = pygame.image.load(file_name).convert()
+        self.sprite_sheet = pygame.image.load(file_name).convert_alpha()
 
     def get_image(self, x, y, width, height):
         """Получение фрагмента из набора спрайтов, заданного координатами и размерами"""
-        image = pygame.Surface((width, height)).convert()
+        image = get_empty_image(width, height)
         image.blit(self.sprite_sheet, (0, 0), pygame.Rect(x, y, width, height))
-        image.set_colorkey(BLACK)
         return pygame.transform.scale(image, (width, height))
 
     def get_cell_image(self, col, row, width=SPRITE_SIZE, height=SPRITE_SIZE):
@@ -148,15 +152,9 @@ class BaseSprite(pygame.sprite.Sprite):
         """Сброс сдвига при отображении спрайтов"""
         cls.set_offset(0, 0)
 
-    @staticmethod
-    def get_empty_image(width=SPRITE_SIZE, height=SPRITE_SIZE):
-        image = pygame.Surface((width, height)).convert()
-        image.set_colorkey(BLACK)
-        return image
-
     def __init__(self):
         super().__init__()
-        self.image = self.get_empty_image()
+        self.image = get_empty_image()
         self.rect = self.image.get_rect()
 
     def get_pos(self):
@@ -169,7 +167,7 @@ class BaseSprite(pygame.sprite.Sprite):
         self.rect.centery = y
 
     def set_cell_pos(self, col, row):
-        """Задание позиции спрайта в табличном представлении и  с учётом сдвига"""
+        """Задание позиции спрайта в табличном представлении и с учётом сдвига"""
         new_col = col + self.col_offset
         new_row = row + self.row_offset
         self.set_pos(new_col * SPRITE_SIZE + SPRITE_SIZE // 2,
@@ -259,6 +257,7 @@ class Player(BaseSprite):
         self.last_anim_tick = None
 
     def define_sprite_sheet(self):
+        # Метод реализован в дочерних классах.
         pass
 
     def load_sprites(self):
@@ -352,8 +351,9 @@ class Player(BaseSprite):
         if self.last_anim_tick is None:
             self.current_sprite_index = 0
             do_step = True
-        elif now - self.last_anim_tick > PlAYER_ANIMATION_DURATION:
-            # Если после предыдущего шага прошло достаточно времени, то разрешаем его сделать
+        elif now - self.last_anim_tick > PLAYER_ANIMATION_DURATION:
+            # Если после предыдущего шага прошло достаточно времени,
+            # то разрешается сделать следующий шаг
             # при этом вычисляется индекс следующего кадра анимации
             self.current_sprite_index = (self.current_sprite_index + 1) % len(self.sprites)
             do_step = True
@@ -432,11 +432,11 @@ class ElementSprite(BaseSprite):
 
     def load_images(self):
         """Загрузка 2х спрайтов, для элемента в неактивном и активном состоянии"""
-        image = self.get_empty_image()
+        image = get_empty_image()
         self.images = [image for _ in range(2)]
 
     def set_active(self, active):
-        """Изменение ссостояния активности объекта"""
+        """Изменение состояния активности объекта"""
         pos = self.get_pos()
         self.is_active = active
         # Изменение спрайта
@@ -627,6 +627,7 @@ class Door(ElementSprite):
 
     def update(self):
         if not self.is_interacted and not self.is_active:
+            # Если дверь открыта кнопкой, но в ней стоит игрок, то она не закроется до его ухода
             if not pygame.sprite.collide_rect(self, self.water_player) and \
                     not pygame.sprite.collide_rect(self, self.fire_player):
                 self.set_active(True)
@@ -687,8 +688,8 @@ class Portal(ElementSprite):
         self.other_portal = None
 
     def load_images(self):
-        input_image = self.sprite_sheet.get_cell_image(self.kind * 2, 5)
-        output_image = self.sprite_sheet.get_cell_image(self.kind * 2 + 1, 5)
+        output_image = self.sprite_sheet.get_cell_image(self.kind * 2, 5)
+        input_image = self.sprite_sheet.get_cell_image(self.kind * 2 + 1, 5)
         self.images = [output_image, input_image]
 
     def is_input(self):
@@ -709,9 +710,7 @@ class Portal(ElementSprite):
         if self.is_input() and \
                 self.other_portal is not None:
             subject.reset_walking()
-            new_pos = list(self.other_portal.get_pos())
-            # new_pos[0] += subject.get_pos()[0] - self.get_pos()[0]
-            # new_pos[1] += subject.get_pos()[1] - self.get_pos()[1]
+            new_pos = self.other_portal.get_pos()
             subject.set_pos(*new_pos)
 
 
@@ -732,8 +731,8 @@ class LevelSprite(BaseSprite):
         self.set_cell_pos(col, row)
 
     def define_image(self):
-        """Определение изображения для уровня, в зависимости от того пройден он или нет"""
-        self.image = self.get_empty_image(SPRITE_SIZE, SPRITE_SIZE * 2)
+        """Определение изображения для уровня в зависимости от того, пройден он или нет"""
+        self.image = get_empty_image(SPRITE_SIZE, SPRITE_SIZE * 2)
         if not self.is_unlocked:
             image = self.sprite_sheet.get_cell_image(0, 0)
             color = None
@@ -769,7 +768,7 @@ class Level:
 
     @staticmethod
     def get_kind(elem):
-        """Определение вид элемента по его обзначению"""
+        """Определение вида элемента по его обозначению"""
         return 1 if elem.isupper() else 0
 
     def load_level(self, filename):
@@ -910,8 +909,7 @@ class Screen:
         surface.fill(self.bg_color1)
         pygame.draw.rect(surface, self.bg_color2, self.text_rect)
         pygame.draw.rect(surface, self.shadow_color, self.shadow_rect)
-        image = pygame.image.load(os.path.join(IMG_DIR, IMG_FILE_TITLE)).convert()
-        image.set_colorkey(BLACK)
+        image = pygame.image.load(os.path.join(IMG_DIR, IMG_FILE_TITLE)).convert_alpha()
         rect = image.get_rect()
         surface.blit(image, rect)
 
@@ -1087,7 +1085,7 @@ class Game:
         """Создание новой игры"""
         self.reset_game()
 
-        # Создание обхекта с данными уровня
+        # Создание объекта с данными уровня
         level = Level(levelname)
         # Загрузка сдвига для текущего уровня
         BaseSprite.set_offset(level.col_offset, level.row_offset)
@@ -1215,7 +1213,6 @@ class Game:
                 input_portal.connect_portal(output_portal)
                 output_portal.connect_portal(input_portal)
                 if level_elem_portal_switch in self.connection_dict:
-                    switch: PortalSwitch
                     for switch in self.connection_dict[level_elem_portal_switch]:
                         switch.connect_portals(input_portal, output_portal)
                         for other_switch in self.connection_dict[level_elem_portal_switch]:
