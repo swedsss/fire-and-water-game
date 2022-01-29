@@ -1,45 +1,10 @@
 import sys
 import csv
 from typing import Optional
-from sprites import *
-
-
-class LevelSprite(BaseSprite):
-    """Класс для спрайтов уровней при выборе уровня"""
-
-    def __init__(self, col, row, number, is_unlocked, is_done):
-        super().__init__()
-        self.number = number
-
-        self.is_unlocked = is_unlocked
-        self.is_done = is_done
-
-        self.sprite_sheet = SpriteSheet(os.path.join(IMG_DIR, SPRITE_FILE_LEVEL_ICONS))
-        self.define_image()
-        self.sprite_sheet = None
-
-        self.set_cell_pos(col, row)
-
-    def define_image(self):
-        """Определение изображения для уровня в зависимости от того, пройден он или нет"""
-        self.image = get_empty_image(SPRITE_SIZE, SPRITE_SIZE * 2)
-        if not self.is_unlocked:
-            image = self.sprite_sheet.get_cell_image(0, 0)
-            color = None
-        elif not self.is_done:
-            image = self.sprite_sheet.get_cell_image(1, 0)
-            color = WHITE
-        else:
-            image = self.sprite_sheet.get_cell_image(2, 0)
-            color = GREEN
-        self.image.blit(image, (0, 0))
-        if color is not None:
-            display_text(self.image, str(self.number), 24, color,
-                         SPRITE_SIZE // 2, SPRITE_SIZE + SPRITE_SIZE // 2)
-
-    def get_levelname(self):
-        """Получение имени файла по номеру уровня"""
-        return f"level{self.number}.txt"
+import pygame
+from constants import *
+from functions import display_text
+from sprites import BaseSprite, LevelSprite
 
 
 class SaveFile:

@@ -1,5 +1,5 @@
 import os
-import pygame
+from pygame import Color
 
 SPRITE_SIZE = 32
 MAX_LEVEL_SIZE = 25
@@ -15,9 +15,9 @@ PLAYER_STEP = SPRITE_SIZE // (8 if not TURBO_MODE else 4)
 PLAYER_ANIMATION_DURATION = 70 if not TURBO_MODE else 10
 
 # Константы цветов
-BLACK = pygame.Color('black')
-WHITE = pygame.Color('white')
-GREEN = pygame.Color('green')
+BLACK = Color('black')
+WHITE = Color('white')
+GREEN = Color('green')
 
 # Константы папок и путей к ним
 DIR_NAME_LEVELS = 'levels'
@@ -75,8 +75,8 @@ SCREEN_SHADOW_COLOR = "shadow_color"
 SCREEN_TEXT_COLOR = "text_color"
 
 SCREEN_COLORS_DICT = {
-    SCREEN_BG_COLOR1: pygame.Color(47, 72, 78),
-    SCREEN_BG_COLOR2: pygame.Color(54, 54, 54),
-    SCREEN_SHADOW_COLOR: pygame.Color(27, 38, 50),
-    SCREEN_TEXT_COLOR: pygame.Color(56, 105, 117)
+    SCREEN_BG_COLOR1: Color(47, 72, 78),
+    SCREEN_BG_COLOR2: Color(54, 54, 54),
+    SCREEN_SHADOW_COLOR: Color(27, 38, 50),
+    SCREEN_TEXT_COLOR: Color(56, 105, 117)
 }

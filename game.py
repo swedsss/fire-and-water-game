@@ -1,7 +1,13 @@
-from blocks import *
-from players import *
-from elements import *
-from screens import *
+import sys
+from typing import Union
+import pygame
+from constants import *
+from sprites import BaseSprite
+from sprites import Floor, Wall, Lava, River, Acid
+from sprites import FirePlayer, WaterPlayer
+from sprites import ElementSprite, Ruby, Aquamarine, FireExit, WaterExit
+from sprites import DoorButton, Door, PortalSwitch, Portal
+from screens import StartScreen, EndScreen
 
 
 class Level:
