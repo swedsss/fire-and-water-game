@@ -15,9 +15,11 @@ PLAYER_STEP = SPRITE_SIZE // (8 if not TURBO_MODE else 4)
 PLAYER_ANIMATION_DURATION = 70 if not TURBO_MODE else 10
 
 # Константы цветов
-BLACK = Color('black')
-WHITE = Color('white')
-GREEN = Color('green')
+COLOR_BLACK = Color('black')
+COLOR_WHITE = Color('white')
+COLOR_RED = Color('red')
+COLOR_GREEN = Color('green')
+COLOR_BLUE = Color('blue')
 
 # Константы папок и путей к ним
 DIR_NAME_LEVELS = 'levels'
@@ -73,10 +75,27 @@ SCREEN_BG_COLOR1 = "bg_color1"
 SCREEN_BG_COLOR2 = "bg_color2"
 SCREEN_SHADOW_COLOR = "shadow_color"
 SCREEN_TEXT_COLOR = "text_color"
+SCREEN_FIRE_TEXT_COLOR = "fire_text_color"
+SCREEN_FIRE_SHADOW_COLOR = "fire_shadow_color"
+SCREEN_WATER_TEXT_COLOR = "water_text_color"
+SCREEN_WATER_SHADOW_COLOR = "water_shadow_color"
 
 SCREEN_COLORS_DICT = {
     SCREEN_BG_COLOR1: Color(47, 72, 78),
     SCREEN_BG_COLOR2: Color(54, 54, 54),
     SCREEN_SHADOW_COLOR: Color(27, 38, 50),
-    SCREEN_TEXT_COLOR: Color(56, 105, 117)
+    SCREEN_TEXT_COLOR: Color(56, 105, 117),
+    SCREEN_FIRE_TEXT_COLOR: Color(207, 50, 50),
+    SCREEN_FIRE_SHADOW_COLOR: Color(143, 34, 34),
+    SCREEN_WATER_TEXT_COLOR: Color(60, 188, 252),
+    SCREEN_WATER_SHADOW_COLOR: Color(11, 94, 135)
 }
+
+TIME_START_GAME = 1
+TIME_END_GAME = 2
+TIME_FIRE_EXIT_ACTIVATION = 3
+TIME_WATER_EXIT_ACTIVATION = 4
+
+DURATION_GAME_TIME = 1
+DURATION_FIRE_EXIT_ACTIVATION = 2
+DURATION_WATER_EXIT_ACTIVATION = 3

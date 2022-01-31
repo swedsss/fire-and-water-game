@@ -3,7 +3,7 @@ import csv
 from typing import Optional
 import pygame
 from constants import *
-from functions import display_text
+from functions import display_text_with_shadow
 from sprites import BaseSprite, LevelSprite
 
 
@@ -45,11 +45,6 @@ class Screen:
     def __init__(self):
         self.screen_sprites = pygame.sprite.Group()
 
-        self.bg_color1 = SCREEN_COLORS_DICT[SCREEN_BG_COLOR1]
-        self.bg_color2 = SCREEN_COLORS_DICT[SCREEN_BG_COLOR2]
-        self.shadow_color = SCREEN_COLORS_DICT[SCREEN_SHADOW_COLOR]
-        self.text_color = SCREEN_COLORS_DICT[SCREEN_TEXT_COLOR]
-
         self.shadow_cell_rect = pygame.Rect(2, 3, 21, 1)
         self.text_cell_rect = pygame.Rect(2, 4, 21, 20)
         self.shadow_rect = pygame.Rect(SPRITE_SIZE * self.shadow_cell_rect.left,
@@ -68,9 +63,9 @@ class Screen:
 
     def prepare(self, surface):
         """Прорисовка общего фона для экранов"""
-        surface.fill(self.bg_color1)
-        pygame.draw.rect(surface, self.bg_color2, self.text_rect)
-        pygame.draw.rect(surface, self.shadow_color, self.shadow_rect)
+        surface.fill(SCREEN_COLORS_DICT[SCREEN_BG_COLOR1])
+        pygame.draw.rect(surface, SCREEN_COLORS_DICT[SCREEN_BG_COLOR2], self.text_rect)
+        pygame.draw.rect(surface, SCREEN_COLORS_DICT[SCREEN_SHADOW_COLOR], self.shadow_rect)
         image = pygame.image.load(os.path.join(IMG_DIR, IMG_FILE_TITLE)).convert_alpha()
         rect = image.get_rect()
         surface.blit(image, rect)
@@ -154,9 +149,10 @@ class StartScreen(Screen):
 
     def render(self, surface):
         self.prepare(surface)
-        for y_offset, color in [(4, self.shadow_color), (0, self.text_color)]:
-            display_text(surface, 'ВЫБЕРИТЕ УРОВЕНЬ:', 50, color,
-                         SCREEN_WIDTH // 2, SCREEN_WIDTH // 5 + y_offset)
+        display_text_with_shadow(surface, 'ВЫБЕРИТЕ УРОВЕНЬ:', 50,
+                                 SCREEN_COLORS_DICT[SCREEN_TEXT_COLOR],
+                                 SCREEN_COLORS_DICT[SCREEN_SHADOW_COLOR],
+                                 SCREEN_WIDTH // 2, SCREEN_WIDTH // 5, 4)
         self.screen_sprites.draw(surface)
         pygame.display.flip()
 
@@ -170,24 +166,83 @@ class StartScreen(Screen):
 
 class EndScreen(Screen):
     """Конечный экран для отображения результатов"""
+    ATTRIB_OFFSET = 120
+    VALUE_OFFSET = 40
 
     def __init__(self):
         super().__init__()
-        self.win_game = False
+        self.game_info = None
 
-    def set_result(self, result):
+    def set_info(self, game_info):
         """Установка результатов игры"""
-        self.win_game = result
+        self.game_info = game_info
 
     def render(self, surface):
         self.prepare(surface)
-        if self.win_game:
+        if self.game_info.win_game:
             result_text = 'УРОВЕНЬ ПРОЙДЕН!'
         else:
-            result_text = 'ВЫ ПРОИГРАЛИ!'
-        for i, word in enumerate(result_text.split()):
-            y = self.text_rect.top + self.text_rect.height // 3 + self.text_rect.height // 6 * i
-            for y_offset, color in [(4, self.shadow_color), (0, self.text_color)]:
-                display_text(surface, word, 80, color,
-                             SCREEN_WIDTH // 2, y + y_offset)
+            result_text = 'УРОВЕНЬ НЕ ПРОЙДЕН!'
+        display_text_with_shadow(surface, result_text, 60,
+                                 SCREEN_COLORS_DICT[SCREEN_TEXT_COLOR],
+                                 SCREEN_COLORS_DICT[SCREEN_SHADOW_COLOR],
+                                 SCREEN_WIDTH // 2, SCREEN_WIDTH // 5, 4)
+
+        attrib_y = SCREEN_HEIGHT // 3
+        value_y = attrib_y + self.VALUE_OFFSET
+        display_text_with_shadow(surface, "Результат игры", 40,
+                                 SCREEN_COLORS_DICT[SCREEN_TEXT_COLOR],
+                                 SCREEN_COLORS_DICT[SCREEN_SHADOW_COLOR],
+                                 SCREEN_WIDTH // 2, attrib_y, 4)
+        color = COLOR_GREEN if self.game_info.win_game else COLOR_RED
+        display_text_with_shadow(surface, self.game_info.get_players_status_text(), 30,
+                                 color,
+                                 COLOR_BLACK,
+                                 SCREEN_WIDTH // 2, value_y, 2)
+
+        attrib_y += self.ATTRIB_OFFSET
+        value_y = attrib_y + self.VALUE_OFFSET
+        display_text_with_shadow(surface, "Общее время игры", 40,
+                                 SCREEN_COLORS_DICT[SCREEN_TEXT_COLOR],
+                                 SCREEN_COLORS_DICT[SCREEN_SHADOW_COLOR],
+                                 SCREEN_WIDTH // 2, attrib_y, 4)
+        display_text_with_shadow(surface, self.game_info.get_duration(DURATION_GAME_TIME), 30,
+                                 COLOR_WHITE,
+                                 COLOR_BLACK,
+                                 SCREEN_WIDTH // 2, value_y, 2)
+
+        attrib_y += self.ATTRIB_OFFSET
+        value_y = attrib_y + self.VALUE_OFFSET
+        display_text_with_shadow(surface, "Количество собранных камней", 40,
+                                 SCREEN_COLORS_DICT[SCREEN_TEXT_COLOR],
+                                 SCREEN_COLORS_DICT[SCREEN_SHADOW_COLOR],
+                                 SCREEN_WIDTH // 2, attrib_y, 4)
+        stone_text = ' из '.join([str(num) for num in self.game_info.get_ruby_info()])
+        display_text_with_shadow(surface, stone_text, 30,
+                                 SCREEN_COLORS_DICT[SCREEN_FIRE_TEXT_COLOR],
+                                 SCREEN_COLORS_DICT[SCREEN_FIRE_SHADOW_COLOR],
+                                 SCREEN_WIDTH // 3, value_y, 1)
+        stone_text = ' из '.join([str(num) for num in self.game_info.get_aquamarine_info()])
+        display_text_with_shadow(surface, stone_text, 30,
+                                 SCREEN_COLORS_DICT[SCREEN_WATER_TEXT_COLOR],
+                                 SCREEN_COLORS_DICT[SCREEN_WATER_SHADOW_COLOR],
+                                 SCREEN_WIDTH * 2 // 3, value_y, 2)
+
+        attrib_y += self.ATTRIB_OFFSET
+        value_y = attrib_y + self.VALUE_OFFSET
+        display_text_with_shadow(surface, "Время активации портала", 40,
+                                 SCREEN_COLORS_DICT[SCREEN_TEXT_COLOR],
+                                 SCREEN_COLORS_DICT[SCREEN_SHADOW_COLOR],
+                                 SCREEN_WIDTH // 2, attrib_y, 4)
+        display_text_with_shadow(surface,
+                                 self.game_info.get_duration(DURATION_FIRE_EXIT_ACTIVATION), 30,
+                                 SCREEN_COLORS_DICT[SCREEN_FIRE_TEXT_COLOR],
+                                 SCREEN_COLORS_DICT[SCREEN_FIRE_SHADOW_COLOR],
+                                 SCREEN_WIDTH // 3, value_y, 2)
+        display_text_with_shadow(surface,
+                                 self.game_info.get_duration(DURATION_WATER_EXIT_ACTIVATION), 30,
+                                 SCREEN_COLORS_DICT[SCREEN_WATER_TEXT_COLOR],
+                                 SCREEN_COLORS_DICT[SCREEN_WATER_SHADOW_COLOR],
+                                 SCREEN_WIDTH * 2 // 3, value_y, 2)
+
         pygame.display.flip()

@@ -122,6 +122,7 @@ class Player(BaseSprite):
 
         self.is_alive = True
         self.death_groups = []
+        self.death_sprite = None
 
         self.walk_offset = None
         self.current_sprite_index = None
@@ -265,8 +266,10 @@ class Player(BaseSprite):
     def after_move_checks(self):
         """Проверки после перемещения персонажа в соседнюю клетку"""
         for death_group in self.death_groups:
-            if pygame.sprite.spritecollideany(self, death_group):
+            self.death_sprite = pygame.sprite.spritecollideany(self, death_group)
+            if self.death_sprite is not None:
                 self.is_alive = False
+                break
 
 
 class FirePlayer(Player):
@@ -609,10 +612,10 @@ class LevelSprite(BaseSprite):
             color = None
         elif not self.is_done:
             image = self.sprite_sheet.get_cell_image(1, 0)
-            color = WHITE
+            color = COLOR_WHITE
         else:
             image = self.sprite_sheet.get_cell_image(2, 0)
-            color = GREEN
+            color = COLOR_GREEN
         self.image.blit(image, (0, 0))
         if color is not None:
             display_text(self.image, str(self.number), 24, color,

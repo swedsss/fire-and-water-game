@@ -1,5 +1,6 @@
 import sys
 from typing import Union
+from datetime import datetime as dt
 import pygame
 from constants import *
 from sprites import BaseSprite
@@ -103,6 +104,112 @@ class Level:
         return 0 <= col < self.width and 0 <= row < self.height
 
 
+class GameInfo:
+    """Класс с информацией об игре"""
+
+    def __init__(self):
+        self.fire_player = None
+        self.water_player = None
+
+        self.win_game = False
+
+        # Количество камней в начале и в конце игры
+        self.ruby_count_at_start = 0
+        self.ruby_count_at_end = 0
+        self.aquamarine_count_at_start = 0
+        self.aquamarine_count_at_end = 0
+
+        # Объекты времени в игре (начало, конец игры, активация порталов)
+        self.start_game_time = None
+        self.end_game_time = None
+        self.fire_exit_activation_time = None
+        self.water_exit_activation_time = None
+
+    @staticmethod
+    def format_duration(duration=None):
+        """Представление длительности в текстовом формате"""
+        if duration is None:
+            return f"--:--:--"
+        else:
+            return f"{str(duration.seconds // 3600).zfill(2)}" \
+                   f":{str(duration.seconds % 3600 // 60).zfill(2)}" \
+                   f":{str(duration.seconds % 60).zfill(2)}"
+            # f".{str(duration.microseconds // 1000).zfill(3)}"
+
+    def add_players(self, fire_player, water_player):
+        self.fire_player = fire_player
+        self.water_player = water_player
+
+    def set_stone_count(self, time_type, ruby_count, aquamarine_count):
+        """Установка количества камней на уровне"""
+        if time_type == TIME_START_GAME:
+            self.ruby_count_at_start = ruby_count
+            self.aquamarine_count_at_start = aquamarine_count
+        elif time_type == TIME_END_GAME:
+            self.ruby_count_at_end = ruby_count
+            self.aquamarine_count_at_end = aquamarine_count
+        else:
+            return
+
+    def set_time(self, time_type):
+        """Установка времени"""
+        if time_type == TIME_START_GAME:
+            self.start_game_time = dt.now()
+        elif time_type == TIME_END_GAME:
+            self.end_game_time = dt.now()
+        elif time_type == TIME_FIRE_EXIT_ACTIVATION:
+            self.fire_exit_activation_time = dt.now()
+        elif time_type == TIME_WATER_EXIT_ACTIVATION:
+            self.water_exit_activation_time = dt.now()
+
+    def set_win_game(self, win_name):
+        self.win_game = win_name
+
+    def get_players_status_text(self):
+        """Получение статуса игроков после окончания игры"""
+        if not self.fire_player.is_alive:
+            if isinstance(self.fire_player.death_sprite, River):
+                return f"Огонь утонул в реке"
+            elif isinstance(self.fire_player.death_sprite, Acid):
+                return f"Огонь наступил в кислоту"
+            else:
+                return f"Огонь погиб"
+        elif not self.water_player.is_alive:
+            if isinstance(self.water_player.death_sprite, Lava):
+                return f"Вода сгорела в лаве"
+            elif isinstance(self.water_player.death_sprite, Acid):
+                return f"Вода наступила в кислоту"
+            else:
+                return f"Вода погибла"
+        else:
+            return "Игроки успешно покинули уровень"
+
+    def get_ruby_info(self):
+        rubies_picked = max(self.ruby_count_at_start - self.ruby_count_at_end, 0)
+        return rubies_picked, self.ruby_count_at_start
+
+    def get_aquamarine_info(self):
+        aquamarines_picked = max(self.aquamarine_count_at_start - self.aquamarine_count_at_end, 0)
+        return aquamarines_picked, self.aquamarine_count_at_start
+
+    def get_duration(self, duration_type):
+        """Получение длительности в тестовом формате"""
+        if duration_type == DURATION_GAME_TIME:
+            time = self.end_game_time
+        elif duration_type == DURATION_FIRE_EXIT_ACTIVATION:
+            time = self.fire_exit_activation_time
+        elif duration_type == DURATION_WATER_EXIT_ACTIVATION:
+            time = self.water_exit_activation_time
+        else:
+            time = None
+        if self.start_game_time is not None and \
+                time is not None:
+            duration = time - self.start_game_time
+            return self.format_duration(duration)
+        else:
+            return self.format_duration()
+
+
 class Game:
     """Основной класс игры"""
 
@@ -119,7 +226,6 @@ class Game:
 
         self.running = True
         self.game_over = False
-        self.win_game = False
         self.with_end_screen = False
 
         # Группы спрайтов
@@ -138,7 +244,11 @@ class Game:
         self.fire_exit = None
         self.water_exit = None
 
+        # Словарь для соединения элементов на уровне
         self.connection_dict = {}
+
+        # Информация об игре
+        self.game_info = None
 
     def reset_game(self):
         """Сброс атрибутов игры"""
@@ -152,6 +262,8 @@ class Game:
         self.water_exit = None
 
         self.connection_dict.clear()
+
+        self.game_info = None
 
     def new_game(self, levelname):
         """Создание новой игры"""
@@ -239,7 +351,14 @@ class Game:
         # Соединение элементов
         self.connect_elements()
 
-        self.win_game = False
+        # Заполнение информации об игре
+        self.game_info = GameInfo()
+        self.game_info.add_players(self.fire_player, self.water_player)
+        self.game_info.set_stone_count(TIME_START_GAME,
+                                       len(self.fire_exit.ruby_sprites),
+                                       len(self.water_exit.aquamarine_sprites))
+        self.game_info.set_time(TIME_START_GAME)
+
         self.game_over = False
 
     def connect_elements(self):
@@ -249,15 +368,15 @@ class Game:
                 [(LEVEL_ELEM_RUBY, LEVEL_ELEM_FIRE_EXIT, self.fire_player),
                  (LEVEL_ELEM_AQUAMARINE, LEVEL_ELEM_WATER_EXIT, self.water_player)]:
 
-            if level_elem_stone in self.connection_dict and \
-                    level_elem_exit in self.connection_dict:
+            if level_elem_exit in self.connection_dict:
                 level_exit = self.connection_dict[level_elem_exit][0]
                 if player is not None:
                     level_exit.connect_player(player)
-                for stone in self.connection_dict[level_elem_stone]:
-                    if player is not None:
-                        stone.connect_player(player)
-                    level_exit.connect_stone(stone)
+                if level_elem_stone in self.connection_dict:
+                    for stone in self.connection_dict[level_elem_stone]:
+                        if player is not None:
+                            stone.connect_player(player)
+                        level_exit.connect_stone(stone)
 
         # Соединение кнопок, дверей и игроков
         for level_elem_doorbutton, level_elem_door in \
@@ -338,10 +457,25 @@ class Game:
         """Обновление спрайтов"""
         self.all_sprites.update()
 
+        # Запись информации о времени активации порталов
+        if self.game_info is not None:
+            if self.game_info.fire_exit_activation_time is None and \
+                    self.fire_exit is not None and \
+                    self.fire_exit.is_active:
+                self.game_info.set_time(TIME_FIRE_EXIT_ACTIVATION)
+            if self.game_info.water_exit_activation_time is None and \
+                    self.water_exit is not None and \
+                    self.water_exit.is_active:
+                self.game_info.set_time(TIME_WATER_EXIT_ACTIVATION)
+
         # Уровень не пройден, если один из игроков не выжил
         for player in [self.fire_player, self.water_player]:
             if player is not None and not player.is_alive:
-                self.win_game = False
+                self.game_info.set_time(TIME_END_GAME)
+                self.game_info.set_stone_count(TIME_END_GAME,
+                                               len(self.fire_exit.ruby_sprites),
+                                               len(self.water_exit.aquamarine_sprites))
+                self.game_info.set_win_game(False)
                 self.game_over = True
                 self.with_end_screen = True
                 return
@@ -349,7 +483,11 @@ class Game:
         # Уровень пройден, если произошло взаимодейтвие игроков с обоими выходами одновременно
         if self.fire_exit is not None and self.fire_exit.is_interacted and \
                 self.water_exit is not None and self.water_exit.is_interacted:
-            self.win_game = True
+            self.game_info.set_time(TIME_END_GAME)
+            self.game_info.set_stone_count(TIME_END_GAME,
+                                           len(self.fire_exit.ruby_sprites),
+                                           len(self.water_exit.aquamarine_sprites))
+            self.game_info.set_win_game(True)
             self.start_screen.unlock_new_level()
             self.game_over = True
             self.with_end_screen = True
@@ -362,7 +500,7 @@ class Game:
 
     def display(self):
         """Отрисовка элементов игры"""
-        self.screen.fill(BLACK)
+        self.screen.fill(COLOR_BLACK)
         self.all_sprites.draw(self.screen)
 
         pygame.display.flip()
@@ -383,7 +521,7 @@ class Game:
 
     def show_end_screen(self):
         """Показ конечного экрана"""
-        self.end_screen.set_result(self.win_game)
+        self.end_screen.set_info(self.game_info)
         self.end_screen.show(self.screen)
 
 
